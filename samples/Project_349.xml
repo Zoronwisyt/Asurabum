@@ -1,0 +1,225 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<!--
+Created by Alight Motion (http://alightmotion.com)
+Exported: 2026-10-07 07:51 PM
+6.2.59 (868)
+-->
+<scene title="Project Name 349" width="1080" height="1350" exportWidth="1920" exportHeight="1080" bgcolor="#FF000000" totalTime="783" fps="60" modifiedTime="1791417069918" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="freeze">
+  <media uri="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" type="image/png" size="3045926" infoUpdated="1784182055254" width="1080" height="1350"/>
+  <embedScene id="1" label="Group 7" startTime="0" endTime="783" fillType="intrinsic">
+    <transform>
+      <location value="551.745239,675.000000,0.000000"/>
+    </transform>
+    <fillColor value="#FF000000"/>
+    <scene title="" width="3270" height="1352" exportWidth="1920" exportHeight="1080" bgcolor="#00000000" totalTime="783" fps="60" modifiedTime="0" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="off">
+      <shape id="40" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="-0.007861" v="2728.157471,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="start" type="float" value="0.900000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="46" label=" Copy 6" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.123161" v="2728.157471,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.900000"/>
+          <property name="start" type="float" value="0.800000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="47" label="Copy 6 Copy" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.231910" v="2728.157471,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.800000"/>
+          <property name="start" type="float" value="0.700000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="48" label="Copy 6 Copy 2" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.340659" v="2728.157471,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.700000"/>
+          <property name="start" type="float" value="0.600000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="49" label="Copy 6 Copy 3" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.450719" v="2728.157471,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.600000"/>
+          <property name="start" type="float" value="0.500000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="45" label=" Copy 5" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.450719" v="539.999939,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.500000"/>
+          <property name="start" type="float" value="0.400000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="44" label=" Copy 4" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.340659" v="539.999939,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.400000"/>
+          <property name="start" type="float" value="0.300000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="43" label=" Copy 3" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.231910" v="539.999939,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.300000"/>
+          <property name="start" type="float" value="0.200000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="42" label=" Copy 2" startTime="0" endTime="767" speed="0.9960681" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="0.123161" v="539.999939,675.000000,0.000000"/>
+            <kf t="1.018048" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.200000"/>
+          <property name="start" type="float" value="0.100000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.018048" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="41" label=" Copy" startTime="0" endTime="783" speed="0.9513652" fillType="media" fillImage="am-internal:///79E80CB55B8662B05AFDC24DB42B814BC455410A.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location>
+            <kf t="-0.008062" v="539.999939,675.000000,0.000000"/>
+            <kf t="1.044104" v="1622.333496,675.000000,0.000000" e="cubicBezier 0.34587014 0.0 0.18879056 1.0"/>
+          </location>
+        </transform>
+        <effect id="com.alightcreative.effects.wipe2" locallyApplied="true">
+          <property name="angle" type="float" value="90.000000"/>
+          <property name="end" type="float" value="0.100000"/>
+        </effect>
+        <effect id="com.alightcreative.effects.satvib" locallyApplied="true">
+          <property name="saturation" type="float">
+            <kf t="0.000000" v="-1.000000"/>
+            <kf t="1.044104" v="0.000000" e="cubicBezier 0.50663716 0.0 1.0 1.0"/>
+          </property>
+        </effect>
+        <effect id="com.alightcreative.effects.motionblur4" locallyApplied="true"/>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+    </scene>
+  </embedScene>
+</scene>

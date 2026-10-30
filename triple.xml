@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<!--
+Created by Alight Motion (http://alightmotion.com)
+Exported: 2026-10-21 10:29 PM
+6.2.59 (868)
+-->
+<scene title="" width="1080" height="1350" exportWidth="1920" exportHeight="1080" bgcolor="#FF000000" totalTime="583" fps="60" modifiedTime="1792639770064" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="freeze">
+  <media uri="am-internal:///0D111D8D8E7061F29E5D18E6F2EA2C1D43AB9EBB.PNG" type="image/png" size="2260819" infoUpdated="1792639659710" width="1080" height="1350"/>
+  <bookmark t="0"/>
+  <bookmark t="567"/>
+  <embedScene id="5" label="Group and Mask 1" startTime="0" endTime="583" fillType="intrinsic">
+    <transform>
+      <location value="540.000000,675.000000,0.000000"/>
+    </transform>
+    <fillColor value="#FF000000"/>
+    <effect id="com.alightcreative.effects.hollowbox" locallyApplied="true"/>
+    <effect id="com.alightcreative.effects.stretch2" locallyApplied="true">
+      <property name="angle" type="float" value="90.000000"/>
+      <property name="scale" type="float" value="2.990000"/>
+    </effect>
+    <scene title="" width="1082" height="1352" exportWidth="1082" exportHeight="1352" bgcolor="#00000000" totalTime="583" fps="60" modifiedTime="0" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="off">
+      <shape id="2" startTime="0" endTime="583" fillType="media" fillImage="am-internal:///0D111D8D8E7061F29E5D18E6F2EA2C1D43AB9EBB.PNG" mediaFillMode="fill" s=".rect">
+        <transform>
+          <location value="540.000000,675.000000,0.000000"/>
+        </transform>
+        <property name="size" type="vec2" value="540.000000,675.000000"/>
+      </shape>
+      <shape id="4" label="Rectangle 1" startTime="0" endTime="583" fillType="color" blending="mask" s=".rect">
+        <transform>
+          <location value="540.000000,675.000000,0.000000"/>
+          <scale value="1.800000,6.750000"/>
+        </transform>
+        <fillColor value="#FFCFDFC7"/>
+      </shape>
+    </scene>
+  </embedScene>
+</scene>
