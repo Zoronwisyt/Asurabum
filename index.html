@@ -184,7 +184,7 @@
         }, 1100);
       }
 
-      submit.addEventListener('click', function () {
+      submit.addEventListener('click', async function () {
         var val = (input.value || '').trim();
         if (!val) {
           if (error) {
@@ -199,6 +199,41 @@
           return;
         }
 
+        var devId = localStorage.getItem('flippy_dev_id');
+        if (!devId) {
+          devId = 'dev_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+          localStorage.setItem('flippy_dev_id', devId);
+        }
+
+        // 1. Verify against Edge / Server Endpoint with strict device-locking
+        try {
+          var res = await fetch('/__flippy_auth', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: val, deviceId: devId })
+          });
+          var data = await res.json();
+          if (res.ok && data.success) {
+            if (error) error.classList.remove('show');
+            unlock({ user: data.user });
+            return;
+          } else if (res.status === 403) {
+            if (error) {
+              error.textContent = data.error || 'ACCESS DENIED · Key locked to another device';
+              error.classList.add('show');
+            }
+            if (card) {
+              card.classList.remove('denied');
+              void card.offsetWidth;
+              card.classList.add('denied');
+            }
+            return;
+          }
+        } catch (netErr) {
+          // Fallback if running offline / file:// protocol
+        }
+
+        // 2. Client-side fallback check
         var keyHash = computeSha256(val);
         var match = AUTHORIZED_KEYS[keyHash];
 

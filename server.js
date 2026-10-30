@@ -23,7 +23,25 @@ const AUTHORIZED_KEYS = {
   "b44740cfa7b0272e230af2b83cbeef18def7d6b282cfe0810c0589d039f94775": { user: "Sarah", role: "member", maxDevices: 1 },
 };
 
-const DEVICE_LOCK_STORE = new Map();
+// Persistent Disk-Backed Device Lock Store
+const LOCKS_FILE = path.join(__dirname, 'device_locks.json');
+
+function getDeviceLocks() {
+  try {
+    if (fs.existsSync(LOCKS_FILE)) {
+      return JSON.parse(fs.readFileSync(LOCKS_FILE, 'utf8') || '{}');
+    }
+  } catch (e) {}
+  return {};
+}
+
+function saveDeviceLock(keyHash, devId) {
+  const locks = getDeviceLocks();
+  locks[keyHash] = devId;
+  try {
+    fs.writeFileSync(LOCKS_FILE, JSON.stringify(locks, null, 2), 'utf8');
+  } catch (e) {}
+}
 
 function sha256Hex(str) {
   return crypto.createHash('sha256').update(str).digest('hex');
@@ -87,14 +105,15 @@ const server = http.createServer((req, res) => {
           return res.end(JSON.stringify({ error: 'Access Denied: Invalid Key.' }));
         }
 
-        // Device Lock check
+        // Device Lock check with persistent disk storage
         if (match.maxDevices === 1) {
-          const bound = DEVICE_LOCK_STORE.get(keyHash);
+          const locks = getDeviceLocks();
+          const bound = locks[keyHash];
           if (bound && bound !== devId) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
-            return res.end(JSON.stringify({ error: 'Key locked to another device. Contact admin.' }));
+            return res.end(JSON.stringify({ error: 'Key locked to another device. Contact admin to reset.' }));
           }
-          DEVICE_LOCK_STORE.set(keyHash, devId);
+          saveDeviceLock(keyHash, devId);
         }
 
         const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;

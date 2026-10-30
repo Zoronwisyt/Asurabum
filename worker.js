@@ -92,9 +92,15 @@ export default {
           });
         }
 
-        // Device lock check
+        // Device lock check with persistent Cloudflare KV support
         if (match.maxDevices === 1) {
-          const boundDevice = DEVICE_LOCK_STORE.get(keyHash);
+          let boundDevice = null;
+          if (env && env.FLIPPY_KV) {
+            boundDevice = await env.FLIPPY_KV.get("lock:" + keyHash);
+          } else {
+            boundDevice = DEVICE_LOCK_STORE.get(keyHash);
+          }
+
           if (boundDevice && boundDevice !== deviceId) {
             return new Response(JSON.stringify({ 
               error: "Key locked to another device. Contact admin to reset." 
@@ -103,7 +109,12 @@ export default {
               headers: { "Content-Type": "application/json" }
             });
           }
-          DEVICE_LOCK_STORE.set(keyHash, deviceId);
+
+          if (env && env.FLIPPY_KV) {
+            await env.FLIPPY_KV.put("lock:" + keyHash, deviceId);
+          } else {
+            DEVICE_LOCK_STORE.set(keyHash, deviceId);
+          }
         }
 
         // 7-day session token
