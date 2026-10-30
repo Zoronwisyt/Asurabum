@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bezier Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+
+:root {
+  --bg: #0e0e10;
+  --surface-1: #141416;
+  --surface-2: #1a1a1e;
+  --surface-3: #222228;
+  --border: rgba(255,255,255,0.06);
+  --border-bright: rgba(255,255,255,0.12);
+  --text-1: #f2f2f5;
+  --text-2: #8a8a99;
+  --text-3: #55555f;
+  --accent-a: #6C63FF;
+  --accent-b: #FF6B9D;
+  --accent-glow-a: rgba(108,99,255,0.25);
+  --accent-glow-b: rgba(255,107,157,0.25);
+  --curve: #ffffff;
+  --grid: rgba(255,255,255,0.04);
+  --grid-bright: rgba(255,255,255,0.08);
+  --node: #ffffff;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 5px;
+}
+
+html,body{height:100%;background:var(--bg);color:var(--text-1);font-family:'Syne',sans-serif;overflow:hidden}
+
+body {
+  display:grid;
+  grid-template-rows:48px 1fr;
+  grid-template-columns:1fr;
+}
+
+/* ── TOPBAR ── */
+.topbar {
+  grid-row:1;
+  display:flex;
+  align-items:center;
+  padding:0 20px;
+  border-bottom:1px solid var(--border);
+  gap:16px;
+  background:var(--surface-1);
+  position:relative;
+  z-index:10;
+}
+
+.logo {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  font-weight:700;
+  letter-spacing:0.05em;
+  color:var(--text-1);
+  text-transform:uppercase;
+}
+
+.logo-dot {
+  width:8px;height:8px;
+  border-radius:50%;
+  background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+  box-shadow:0 0 8px var(--accent-glow-a);
+}
+
+.divider-v {
+  width:1px;height:20px;
+  background:var(--border-bright);
+  margin:0 4px;
+}
+
+.topbar-label {
+  font-size:11px;
+  color:var(--text-3);
+  font-family:'DM Mono',monospace;
+  letter-spacing:0.04em;
+  text-transform:uppercase;
+}
+
+.topbar-spacer { flex:1 }
+
+.topbar-code {
+  font-family:'DM Mono',monospace;
+  font-size:12px;
+  color:var(--text-2);
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  padding:5px 12px;
+  border-radius:var(--radius-xs);
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.topbar-code:hover{background:var(--surface-3);border-color:var(--border-bright);color:var(--text-1)}
+.topbar-code .copy-flash{color:#6eff9a;font-size:10px;opacity:0;transition:opacity 0.2s}
+.topbar-code .copy-flash.show{opacity:1}
+
+/* ── MAIN LAYOUT ── */
+.workspace {
+  grid-row:2;
+  display:grid;
+  grid-template-columns:300px 1fr 260px;
+  min-height:0;
+  overflow:hidden;
+}
+
+/* ── LEFT SIDEBAR: PRESETS ── */
+.sidebar-left {
+  background:var(--surface-1);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+
+.sidebar-section {
+  padding:16px;
+  border-bottom:1px solid var(--border);
+}
+
+.sidebar-section-label {
+  font-size:10px;
+  font-weight:600;
+  color:var(--text-3);
+  letter-spacing:0.1em;
+  text-transform:uppercase;
+  margin-bottom:12px;
+}
+
+.presets-list {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.preset-item {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:8px 10px;
+  border-radius:var(--radius-xs);
+  cursor:pointer;
+  transition:all 0.12s;
+  border:1px solid transparent;
+  position:relative;
+  overflow:hidden;
+}
+
+.preset-item:hover{background:var(--surface-2)}
+
+.preset-item.active {
+  background:var(--surface-2);
+  border-color:var(--border-bright);
+}
+
+.preset-item.active::before {
+  content:'';
+  position:absolute;left:0;top:0;bottom:0;
+  width:2px;
+  background:linear-gradient(to bottom,var(--accent-a),var(--accent-b));
+  border-radius:2px 0 0 2px;
+}
+
+.preset-thumb {
+  width:44px;height:28px;
+  flex-shrink:0;
+}
+
+.preset-thumb svg{width:100%;height:100%}
+
+.preset-info { flex:1;min-width:0 }
+
+.preset-name {
+  font-size:12px;
+  font-weight:600;
+  color:var(--text-1);
+  line-height:1.3;
+}
+
+.preset-vals {
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  color:var(--text-3);
+  margin-top:1px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* ── CENTER: GRAPH EDITOR ── */
+.center-panel {
+  display:flex;
+  flex-direction:column;
+  background:var(--bg);
+  position:relative;
+  align-items:center;
+  justify-content:center;
+  min-width:0;
+  min-height:0;
+  padding:24px;
+  overflow:hidden;
+}
+
+.center-panel::before {
+  content:'';
+  position:absolute;inset:0;
+  background:
+    radial-gradient(ellipse 60% 40% at 50% 50%, rgba(108,99,255,0.04) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+.graph-wrap {
+  position:relative;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:min(420px, 100%);
+  touch-action:none;
+  overscroll-behavior:contain;
+}
+
+.graph-canvas {
+  display:block;
+  width:100%;
+  height:auto;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:none;
+  cursor:crosshair;
+}
+
+/* Axis labels */
+.axis-label {
+  position:absolute;
+  font-family:'DM Mono',monospace;
+  font-size:10px;
+  color:var(--text-3);
+  letter-spacing:0.04em;
+}
+.axis-label.x0{bottom:-22px;left:0}
+.axis-label.x1{bottom:-22px;right:0}
+.axis-label.y0{left:-28px;bottom:0}
+.axis-label.y1{left:-28px;top:0}
+
+.coord-strip {
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:center;
+  gap:8px;
+  margin-top:20px;
+  max-width:100%;
+}
+
+.coord-pill {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:6px 12px;
+  background:var(--surface-1);
+  border:1px solid var(--border);
+  border-radius:20px;
+  font-family:'DM Mono',monospace;
+  font-size:11px;
+  color:var(--text-2);
+  transition:border-color 0.2s;
+}
+
+.coord-dot {
+  width:6px;height:6px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+
+/* ── RIGHT SIDEBAR: CONTROLS + PREVIEW ── */
+.sidebar-right {
+  background:var(--surface-1);
+  border-left:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+  overflow:hidden;
+}
+
+/* Preview section */
+.preview-section {
+  padding:16px;
+  border-bottom:1px solid var(--border);
+  flex:1;
+  display:flex;
+  flex-direction:column;
+}
+
+.preview-stage {
+  flex:1;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  display:flex;
+  align-items:center;
+  padding:0 24px;
+  min-height:120px;
+  position:relative;
+  overflow:hidden;
+  margin-top:12px;
+  margin-bottom:12px;
+}
+
+.preview-track {
+  width:100%;
+  height:2px;
+  background:var(--border-bright);
+  border-radius:1px;
+  position:relative;
+}
+
+.preview-ball {
+  position:absolute;
+  top:50%;
+  left:0;
+  transform:translate(-50%,-50%);
+  transition:none;
+}
+
+.ball-ring {
+  width:32px;height:32px;
+  border-radius:50%;
+  background:linear-gradient(135deg,var(--accent-a),var(--accent-b));
+  display:flex;align-items:center;justify-content:center;
+}
+
+.ball-inner {
+  width:12px;height:12px;
+  border-radius:50%;
+  background:rgba(255,255,255,0.5);
+}
+
+.play-btn {
+  width:100%;
+  padding:9px;
+  background:var(--surface-3);
+  border:1px solid var(--border-bright);
+  border-radius:var(--radius-sm);
+  color:var(--text-1);
+  font-family:'Syne',sans-serif;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:0.04em;
+  cursor:pointer;
+  transition:all 0.15s;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+}
+.play-btn:hover{background:var(--accent-a);border-color:transparent;box-shadow:0 0 20px var(--accent-glow-a)}
+.play-btn.playing{background:var(--surface-2);color:var(--text-2)}
+
+.play-icon{width:12px;height:12px;display:block}
+
+/* Duration */
+.dur-row {
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:10px;
+}
+
+.dur-label {
+  font-size:10px;
+  color:var(--text-3);
+  font-family:'DM Mono',monospace;
+  letter-spacing:0.04em;
+  white-space:nowrap;
+}
+
+.dur-val {
+  font-size:11px;
+  font-family:'DM Mono',monospace;
+  color:var(--accent-a);
+  min-width:28px;
+  text-align:right;
+}
+
+input[type=range]{
+  -webkit-appearance:none;
+  appearance:none;
+  flex:1;height:3px;
+  background:var(--surface-3);
+  border-radius:2px;
+  outline:none;
+  cursor:pointer;
+}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  width:12px;height:12px;
+  border-radius:50%;
+  background:var(--accent-a);
+  box-shadow:0 0 8px var(--accent-glow-a);
+  cursor:grab;
+  transition:transform 0.1s;
+}
+input[type=range]::-webkit-slider-thumb:active{transform:scale(1.3);cursor:grabbing}
+
+/* Property chips */
+.prop-section {
+  padding:12px 16px;
+  border-bottom:1px solid var(--border);
+}
+
+.prop-chips {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:8px;
+}
+
+.prop-chip {
+  padding:7px 10px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  font-size:11px;
+  font-weight:600;
+  color:var(--text-2);
+  cursor:pointer;
+  transition:all 0.12s;
+  text-align:center;
+  letter-spacing:0.02em;
+}
+.prop-chip:hover{border-color:var(--border-bright);color:var(--text-1)}
+.prop-chip.active{background:rgba(108,99,255,0.12);border-color:rgba(108,99,255,0.4);color:var(--accent-a)}
+
+/* Numeric inputs */
+.inputs-section {
+  padding:12px 16px;
+}
+
+.input-grid {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:6px;
+  margin-top:8px;
+}
+
+.param-input-wrap {
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+}
+
+.param-label {
+  font-size:10px;
+  font-family:'DM Mono',monospace;
+  color:var(--text-3);
+  letter-spacing:0.06em;
+}
+
+.param-label span {
+  font-size:8px;
+  color:var(--text-3);
+}
+
+.param-input {
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  padding:7px 8px;
+  font-family:'DM Mono',monospace;
+  font-size:12px;
+  color:var(--text-1);
+  width:100%;
+  outline:none;
+  transition:border-color 0.15s;
+}
+.param-input:focus{border-color:var(--accent-a)}
+.param-input.p1{border-color:rgba(108,99,255,0.3)}
+.param-input.p2{border-color:rgba(255,107,157,0.3)}
+
+/* ── SVG GRAPH STYLES ── */
+.grid-line-minor{stroke:var(--grid);stroke-width:1}
+.grid-line-major{stroke:var(--grid-bright);stroke-width:1}
+.bound-rect{fill:none;stroke:var(--border-bright);stroke-width:1.5}
+.diagonal{stroke:var(--text-3);stroke-width:1;stroke-dasharray:3 5;opacity:0.4}
+.handle-rod{stroke-width:1.5;fill:none;stroke-dasharray:none}
+.rod-a{stroke:rgba(108,99,255,0.5)}
+.rod-b{stroke:rgba(255,107,157,0.5)}
+.bezier-curve{stroke:var(--curve);stroke-width:2.5;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.bezier-shadow{stroke:rgba(255,255,255,0.08);stroke-width:8;fill:none;stroke-linecap:round}
+.endpoint{fill:var(--node)}
+.handle-h{stroke-width:2;fill:var(--bg);cursor:grab;pointer-events:all;touch-action:none}
+.handle-h:active{cursor:grabbing}
+.ha{stroke:var(--accent-a)}
+.hb{stroke:var(--accent-b)}
+.handle-core-a{fill:var(--accent-a);pointer-events:none}
+.handle-core-b{fill:var(--accent-b);pointer-events:none}
+.handle-hit{fill:rgba(255,255,255,0);stroke:transparent;cursor:grab;pointer-events:all;touch-action:none}
+.handle-hit:active{cursor:grabbing}
+
+/* ── ANALYSIS PANEL ── */
+.analysis-panel {
+  padding:14px 16px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+
+.analysis-summary {
+  font-size:12px;
+  color:var(--text-2);
+  line-height:1.6;
+  min-height:38px;
+  transition:color 0.2s;
+}
+
+.analysis-summary strong {
+  color:var(--text-1);
+  font-weight:600;
+}
+
+.analysis-tags {
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+
+.atag {
+  font-size:10px;
+  font-family:'DM Mono',monospace;
+  padding:3px 8px;
+  border-radius:3px;
+  letter-spacing:0.03em;
+  border:1px solid transparent;
+  font-weight:500;
+}
+
+.atag-pattern  { background:rgba(108,99,255,0.12); border-color:rgba(108,99,255,0.3); color:#a59eff; }
+.atag-overshoot{ background:rgba(255,107,157,0.12); border-color:rgba(255,107,157,0.3); color:#ff9dc3; }
+.atag-velocity { background:rgba(255,200,80,0.10);  border-color:rgba(255,200,80,0.3);  color:#ffc850; }
+.atag-smooth   { background:rgba(80,220,140,0.10);  border-color:rgba(80,220,140,0.3);  color:#50dc8c; }
+.atag-neutral  { background:rgba(255,255,255,0.05); border-color:rgba(255,255,255,0.1); color:var(--text-2); }
+
+.analysis-metrics {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:5px;
+}
+
+.ametric {
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  padding:7px 9px;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.ametric-label {
+  font-size:9px;
+  font-family:'DM Mono',monospace;
+  color:var(--text-3);
+  letter-spacing:0.07em;
+  text-transform:uppercase;
+}
+
+.ametric-val {
+  font-size:13px;
+  font-family:'DM Mono',monospace;
+  color:var(--text-1);
+  font-weight:500;
+}
+
+.ametric-bar {
+  height:2px;
+  background:var(--surface-3);
+  border-radius:1px;
+  margin-top:4px;
+  overflow:hidden;
+}
+
+.ametric-fill {
+  height:100%;
+  border-radius:1px;
+  background:linear-gradient(90deg,var(--accent-a),var(--accent-b));
+  transition:width 0.3s ease;
+}
+
+.use-case {
+  font-size:11px;
+  color:var(--text-3);
+  font-family:'DM Mono',monospace;
+  letter-spacing:0.02em;
+  padding-top:2px;
+  border-top:1px solid var(--border);
+}
+
+.use-case span { color:var(--accent-a) }
+
+/* Scrollable presets */
+.presets-scroll{overflow-y:auto;flex:1;padding:12px 12px}
+.presets-scroll::-webkit-scrollbar{width:4px}
+.presets-scroll::-webkit-scrollbar-track{background:transparent}
+.presets-scroll::-webkit-scrollbar-thumb{background:var(--surface-3);border-radius:2px}
+
+/* ── OVERSHOOT TOGGLE ── */
+.overshoot-section {
+  padding:10px 16px;
+  border-bottom:1px solid var(--border);
+}
+
+.toggle-row {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+}
+
+.toggle-info {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+
+.toggle-title {
+  font-size:11px;
+  font-weight:600;
+  color:var(--text-1);
+  letter-spacing:0.02em;
+}
+
+.toggle-sub {
+  font-size:10px;
+  font-family:'DM Mono',monospace;
+  color:var(--text-3);
+}
+
+.toggle-btn {
+  width:40px;
+  height:22px;
+  border-radius:11px;
+  border:none;
+  background:var(--surface-3);
+  cursor:pointer;
+  position:relative;
+  transition:background 0.2s;
+  flex-shrink:0;
+  outline:none;
+}
+
+.toggle-btn.on {
+  background:var(--accent-a);
+  box-shadow:0 0 12px var(--accent-glow-a);
+}
+
+.toggle-thumb {
+  position:absolute;
+  top:3px;left:3px;
+  width:16px;height:16px;
+  border-radius:50%;
+  background:var(--text-1);
+  transition:transform 0.2s cubic-bezier(.34,1.56,.64,1);
+  pointer-events:none;
+}
+
+.toggle-btn.on .toggle-thumb {
+  transform:translateX(18px);
+}
+
+/* Bottom bar */
+.bottombar{
+  padding:10px 16px;
+  border-top:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:8px;
+  background:var(--surface-1);
+}
+
+.status-dot{width:6px;height:6px;border-radius:50%;background:#6eff9a;flex-shrink:0}
+.status-text{font-size:10px;font-family:'DM Mono',monospace;color:var(--text-3);letter-spacing:0.04em}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+.recording .status-dot{background:var(--accent-b);animation:blink 1s infinite}
+
+@media (max-width: 1080px) {
+  html,body {
+    height:auto;
+    min-height:100%;
+    overflow:auto;
+  }
+
+  body {
+    display:block;
+    min-height:100svh;
+  }
+
+  .topbar {
+    position:sticky;
+    top:0;
+    min-height:48px;
+  }
+
+  .workspace {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) 280px;
+    grid-template-rows:auto auto;
+    min-height:calc(100svh - 48px);
+    overflow:visible;
+  }
+
+  .center-panel {
+    grid-column:1;
+    grid-row:1;
+    min-height:520px;
+  }
+
+  .sidebar-right {
+    grid-column:2;
+    grid-row:1;
+    overflow:visible;
+  }
+
+  .sidebar-left {
+    grid-column:1 / -1;
+    grid-row:2;
+    border-right:0;
+    border-top:1px solid var(--border);
+    overflow:visible;
+  }
+
+  .analysis-panel {
+    display:grid;
+    grid-template-columns:minmax(0, 1fr) minmax(260px, 0.8fr);
+    align-items:start;
+  }
+
+  .analysis-tags,
+  .analysis-summary,
+  .use-case {
+    grid-column:1;
+  }
+
+  .analysis-metrics {
+    grid-column:2;
+    grid-row:1 / span 3;
+  }
+
+  .presets-scroll {
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));
+    max-height:260px;
+    overflow:auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    flex-wrap:wrap;
+    gap:8px;
+    padding:10px 14px;
+  }
+
+  .divider-v,
+  .topbar-label {
+    display:none;
+  }
+
+  .topbar-code {
+    order:3;
+    width:100%;
+    min-width:0;
+    justify-content:center;
+    overflow:hidden;
+  }
+
+  #topbar-code-text {
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .workspace {
+    display:flex;
+    flex-direction:column;
+    min-height:auto;
+  }
+
+  .center-panel {
+    order:1;
+    min-height:auto;
+    padding:18px 16px 20px;
+    overflow:visible;
+  }
+
+  .graph-wrap {
+    width:min(100%, 440px);
+  }
+
+  .handle-hit {
+    r:30;
+  }
+
+  .coord-strip {
+    width:100%;
+    margin-top:14px;
+  }
+
+  .coord-pill {
+    flex:1 1 150px;
+    justify-content:center;
+    min-width:0;
+    padding:7px 10px;
+  }
+
+  .coord-pill span:last-child {
+    min-width:0;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+
+  .sidebar-right {
+    order:2;
+    border-left:0;
+    border-top:1px solid var(--border);
+    overflow:visible;
+  }
+
+  .preview-section {
+    flex:none;
+  }
+
+  .preview-stage {
+    min-height:92px;
+  }
+
+  .prop-chips,
+  .input-grid,
+  .analysis-metrics {
+    grid-template-columns:1fr 1fr;
+  }
+
+  .sidebar-left {
+    order:3;
+  }
+
+  .analysis-panel {
+    display:flex;
+  }
+
+  .presets-scroll {
+    grid-template-columns:1fr;
+    max-height:none;
+  }
+}
+
+@media (max-width: 420px) {
+  .center-panel {
+    padding-inline:12px;
+  }
+
+  .axis-label.x0,
+  .axis-label.x1 {
+    bottom:-18px;
+  }
+
+  .axis-label.y0,
+  .axis-label.y1 {
+    left:-20px;
+  }
+
+  .coord-strip {
+    margin-top:22px;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<header class="topbar">
+  <div class="logo">
+    <span class="logo-dot"></span>
+    Bezier
+  </div>
+  <div class="divider-v"></div>
+  <span class="topbar-label">Motion Curve Editor</span>
+  <div class="topbar-spacer"></div>
+  <button class="topbar-code" id="topbar-copy" title="Click to copy CSS">
+    <span id="topbar-code-text">cubic-bezier(0.79, 0.00, 0.59, 1.00)</span>
+    <span class="copy-flash" id="copy-flash">✓ Copied</span>
+  </button>
+</header>
+
+<div class="workspace">
+
+  <!-- LEFT SIDEBAR: PRESETS -->
+  <aside class="sidebar-left">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Curve Analysis</div>
+    </div>
+
+    <div class="analysis-panel" id="analysis-panel">
+      <div class="analysis-tags" id="analysis-tags"></div>
+      <div class="analysis-summary" id="analysis-summary">Loading...</div>
+      <div class="analysis-metrics">
+        <div class="ametric">
+          <div class="ametric-label">Peak Velocity</div>
+          <div class="ametric-val" id="m-velocity">—</div>
+          <div class="ametric-bar"><div class="ametric-fill" id="m-velocity-bar" style="width:0%"></div></div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-label">Overshoot</div>
+          <div class="ametric-val" id="m-overshoot">—</div>
+          <div class="ametric-bar"><div class="ametric-fill" id="m-overshoot-bar" style="width:0%"></div></div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-label">Start Speed</div>
+          <div class="ametric-val" id="m-start">—</div>
+          <div class="ametric-bar"><div class="ametric-fill" id="m-start-bar" style="width:0%"></div></div>
+        </div>
+        <div class="ametric">
+          <div class="ametric-label">End Speed</div>
+          <div class="ametric-val" id="m-end">—</div>
+          <div class="ametric-bar"><div class="ametric-fill" id="m-end-bar" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div class="use-case" id="use-case"></div>
+    </div>
+
+    <div class="sidebar-section" style="padding-bottom:10px">
+      <div class="sidebar-section-label">Easing Presets</div>
+    </div>
+    <div class="presets-scroll" id="presets-list">
+      <!-- filled by JS -->
+    </div>
+  </aside>
+
+  <!-- CENTER: GRAPH EDITOR -->
+  <main class="center-panel">
+    <div class="graph-wrap" id="graph-wrap">
+      <svg id="svg-graph" class="graph-canvas" width="360" height="360" viewBox="-60 -60 420 420">
+        <defs>
+          <filter id="glow-a" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+          </filter>
+        </defs>
+
+        <!-- Minor grid lines -->
+        <g id="grid-minor"></g>
+        <!-- Major grid lines -->
+        <g id="grid-major"></g>
+
+        <!-- Bounding box -->
+        <rect x="0" y="0" width="300" height="300" class="bound-rect"/>
+
+        <!-- Diagonal reference line -->
+        <line x1="0" y1="300" x2="300" y2="0" class="diagonal" id="diag"/>
+
+        <!-- Handle rods -->
+        <line id="rod-a" class="handle-rod rod-a" x1="0" y1="300" x2="75" y2="30"/>
+        <line id="rod-b" class="handle-rod rod-b" x1="300" y1="0" x2="225" y2="270"/>
+
+        <!-- Curve shadow (soft glow beneath) -->
+        <path id="curve-shadow" class="bezier-shadow"/>
+
+        <!-- Main curve -->
+        <path id="curve" class="bezier-curve"/>
+
+        <!-- Endpoints -->
+        <circle cx="0" cy="300" r="4" class="endpoint"/>
+        <circle cx="300" cy="0" r="4" class="endpoint"/>
+
+        <!-- Handle A (blue/purple) -->
+        <circle id="ha-hit" class="handle-hit" cx="75" cy="270" r="28"/>
+        <circle id="ha" class="handle-h ha" cx="75" cy="270" r="9"/>
+        <circle id="ha-core" class="handle-core-a" cx="75" cy="270" r="4"/>
+
+        <!-- Handle B (pink) -->
+        <circle id="hb-hit" class="handle-hit" cx="225" cy="30" r="28"/>
+        <circle id="hb" class="handle-h hb" cx="225" cy="30" r="9"/>
+        <circle id="hb-core" class="handle-core-b" cx="225" cy="30" r="4"/>
+      </svg>
+
+      <!-- Axis labels -->
+      <span class="axis-label x0">0</span>
+      <span class="axis-label x1">1</span>
+      <span class="axis-label y0">0</span>
+      <span class="axis-label y1">1</span>
+    </div>
+
+    <div class="coord-strip">
+      <div class="coord-pill" id="pill-a">
+        <span class="coord-dot" style="background:var(--accent-a)"></span>
+        <span id="pill-a-text">P1: 0.79, 0.00</span>
+      </div>
+      <div class="coord-pill" id="pill-b">
+        <span class="coord-dot" style="background:var(--accent-b)"></span>
+        <span id="pill-b-text">P2: 0.59, 1.00</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT SIDEBAR: PREVIEW + CONTROLS -->
+  <aside class="sidebar-right">
+
+    <div class="preview-section">
+      <div class="sidebar-section-label">Preview</div>
+      <div class="preview-stage">
+        <div class="preview-track" id="preview-track">
+          <div class="preview-ball" id="preview-ball" style="left:0%">
+            <div class="ball-ring">
+              <div class="ball-inner"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <button class="play-btn" id="play-btn">
+        <svg class="play-icon" viewBox="0 0 12 12" fill="none">
+          <path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" fill="currentColor"/>
+        </svg>
+        Play
+      </button>
+
+      <div class="dur-row">
+        <span class="dur-label">DURATION</span>
+        <input type="range" id="duration" min="0.3" max="3" step="0.1" value="1.2">
+        <span class="dur-val" id="dur-display">1.2s</span>
+      </div>
+    </div>
+
+    <div class="prop-section">
+      <div class="sidebar-section-label">Property</div>
+      <div class="prop-chips" id="prop-chips">
+        <div class="prop-chip active" data-prop="x">Position X</div>
+        <div class="prop-chip" data-prop="scale">Scale</div>
+        <div class="prop-chip" data-prop="rotate">Rotate</div>
+        <div class="prop-chip" data-prop="opacity">Opacity</div>
+      </div>
+    </div>
+
+    <div class="inputs-section">
+      <div class="sidebar-section-label">Parameters</div>
+      <div class="input-grid">
+        <div class="param-input-wrap">
+          <div class="param-label" style="color:rgba(108,99,255,0.8)">X1 <span>/ P1</span></div>
+          <input type="number" class="param-input p1" id="inp-x1" min="0" max="1" step="0.01" value="0.79">
+        </div>
+        <div class="param-input-wrap">
+          <div class="param-label" style="color:rgba(108,99,255,0.8)">Y1 <span>/ P1</span></div>
+          <input type="number" class="param-input p1" id="inp-y1" step="0.01" value="0.00">
+        </div>
+        <div class="param-input-wrap">
+          <div class="param-label" style="color:rgba(255,107,157,0.8)">X2 <span>/ P2</span></div>
+          <input type="number" class="param-input p2" id="inp-x2" min="0" max="1" step="0.01" value="0.59">
+        </div>
+        <div class="param-input-wrap">
+          <div class="param-label" style="color:rgba(255,107,157,0.8)">Y2 <span>/ P2</span></div>
+          <input type="number" class="param-input p2" id="inp-y2" step="0.01" value="1.00">
+        </div>
+      </div>
+    </div>
+
+    <div class="overshoot-section">
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-title">Allow Overshoot</div>
+          <div class="toggle-sub" id="overshoot-sub">Y unconstrained</div>
+        </div>
+        <button class="toggle-btn on" id="overshoot-toggle" title="Toggle Y-axis overshoot">
+          <div class="toggle-thumb"></div>
+        </button>
+      </div>
+    </div>
+
+    <div class="bottombar" id="bottombar">
+      <div class="status-dot" id="status-dot"></div>
+      <span class="status-text" id="status-text">Ready</span>
+    </div>
+
+  </aside>
+</div>
+
+<script>
+const PRESETS = [
+  {name:'Ease',vals:[.79,0,.59,1]},
+  {name:'Linear',vals:[0,0,1,1]},
+  {name:'Ease In',vals:[.42,0,1,1]},
+  {name:'Ease Out',vals:[0,0,.58,1]},
+  {name:'Ease In Out',vals:[.42,0,.58,1]},
+  {name:'Spring',vals:[.68,-.55,.265,1.55]},
+  {name:'Snappy',vals:[.85,0,.15,1]},
+  {name:'AM Default',vals:[.17,.67,.83,.67]},
+  {name:'Decelerate',vals:[0,0,.2,1]},
+  {name:'Accelerate',vals:[.4,0,1,1]},
+  {name:'Sharp',vals:[.4,0,.6,1]},
+  {name:'Overshoot',vals:[.34,1.56,.64,1]},
+];
+
+const G = 300; // grid size in SVG units
+
+let x1=.79,y1=0,x2=.59,y2=1;
+let dragging=null;
+let lastTouchStart=0;
+let activeProp='x';
+let allowOvershoot=true;
+let duration=1.2;
+let animRaf=null, animStart=null, animPlaying=false;
+
+const svg = document.getElementById('svg-graph');
+const ha = document.getElementById('ha'), haC = document.getElementById('ha-core');
+const hb = document.getElementById('hb'), hbC = document.getElementById('hb-core');
+const haHit = document.getElementById('ha-hit'), hbHit = document.getElementById('hb-hit');
+const rodA = document.getElementById('rod-a'), rodB = document.getElementById('rod-b');
+const curvePath = document.getElementById('curve'), curveShadow = document.getElementById('curve-shadow');
+const pillAT = document.getElementById('pill-a-text'), pillBT = document.getElementById('pill-b-text');
+const topCode = document.getElementById('topbar-code-text');
+const copyFlash = document.getElementById('copy-flash');
+const inpX1=document.getElementById('inp-x1'),inpY1=document.getElementById('inp-y1');
+const inpX2=document.getElementById('inp-x2'),inpY2=document.getElementById('inp-y2');
+const ball = document.getElementById('preview-ball');
+const playBtn = document.getElementById('play-btn');
+const durationInput = document.getElementById('duration');
+const durDisplay = document.getElementById('dur-display');
+const statusDot = document.getElementById('status-dot');
+const statusText = document.getElementById('status-text');
+
+// Build grid
+function buildGrid(){
+  const minor = document.getElementById('grid-minor');
+  const major = document.getElementById('grid-major');
+  for(let i=0;i<=4;i++){
+    const v = i*75;
+    const lv = document.createElementNS('http://www.w3.org/2000/svg','line');
+    lv.setAttribute('x1',v);lv.setAttribute('y1',0);lv.setAttribute('x2',v);lv.setAttribute('y2',300);
+    lv.setAttribute('class',i%2===0?'grid-line-major':'grid-line-minor');
+    major.appendChild(lv);
+    const lh = document.createElementNS('http://www.w3.org/2000/svg','line');
+    lh.setAttribute('x1',0);lh.setAttribute('y1',v);lh.setAttribute('x2',300);lh.setAttribute('y2',v);
+    lh.setAttribute('class',i%2===0?'grid-line-major':'grid-line-minor');
+    major.appendChild(lh);
+  }
+  for(let i=1;i<8;i++){
+    if(i%2===0)continue;
+    const v=i*300/8;
+    const lv=document.createElementNS('http://www.w3.org/2000/svg','line');
+    lv.setAttribute('x1',v);lv.setAttribute('y1',0);lv.setAttribute('x2',v);lv.setAttribute('y2',300);
+    lv.setAttribute('class','grid-line-minor');
+    minor.appendChild(lv);
+    const lh=document.createElementNS('http://www.w3.org/2000/svg','line');
+    lh.setAttribute('x1',0);lh.setAttribute('y1',v);lh.setAttribute('x2',300);lh.setAttribute('y2',v);
+    lh.setAttribute('class','grid-line-minor');
+    minor.appendChild(lh);
+  }
+}
+
+function toSVG(nx,ny){
+  // in SVG: x grows right, y grows DOWN. But we want y=0 at bottom, y=1 at top
+  return {x: nx*G, y: G - ny*G};
+}
+
+function updateGraph(){
+  const a = toSVG(x1,y1);
+  const b = toSVG(x2,y2);
+
+  ha.setAttribute('cx',a.x); ha.setAttribute('cy',a.y);
+  haC.setAttribute('cx',a.x); haC.setAttribute('cy',a.y);
+  haHit.setAttribute('cx',a.x); haHit.setAttribute('cy',a.y);
+  hb.setAttribute('cx',b.x); hb.setAttribute('cy',b.y);
+  hbC.setAttribute('cx',b.x); hbC.setAttribute('cy',b.y);
+  hbHit.setAttribute('cx',b.x); hbHit.setAttribute('cy',b.y);
+
+  // Origin = (0,300) in SVG (x=0, y=0 in bezier coords)
+  // End    = (300,0) in SVG (x=1, y=1 in bezier coords)
+  rodA.setAttribute('x2',a.x); rodA.setAttribute('y2',a.y);
+  rodB.setAttribute('x2',b.x); rodB.setAttribute('y2',b.y);
+
+  const d = `M 0 ${G} C ${a.x} ${a.y}, ${b.x} ${b.y}, ${G} 0`;
+  curvePath.setAttribute('d',d);
+  curveShadow.setAttribute('d',d);
+
+  const bx1=x1.toFixed(2),by1=y1.toFixed(2),bx2=x2.toFixed(2),by2=y2.toFixed(2);
+  pillAT.textContent = `P1: ${bx1}, ${by1}`;
+  pillBT.textContent = `P2: ${bx2}, ${by2}`;
+  topCode.textContent = `cubic-bezier(${bx1}, ${by1}, ${bx2}, ${by2})`;
+
+  inpX1.value=bx1; inpY1.value=by1; inpX2.value=bx2; inpY2.value=by2;
+
+  updatePresetHighlight();
+  analyzeCurve();
+
+  // Send update to parent if embedded in iframe
+  if (window.parent !== window) {
+    window.parent.postMessage({
+      type: 'BEZIER_UPDATE',
+      x1: x1, y1: y1, x2: x2, y2: y2
+    }, '*');
+  }
+}
+
+function updatePresetHighlight(){
+  const bx1=x1.toFixed(2),by1=y1.toFixed(2),bx2=x2.toFixed(2),by2=y2.toFixed(2);
+  document.querySelectorAll('.preset-item').forEach(el=>{
+    const v=el.dataset.vals.split(',');
+    if(parseFloat(v[0]).toFixed(2)===bx1 && parseFloat(v[1]).toFixed(2)===by1 &&
+       parseFloat(v[2]).toFixed(2)===bx2 && parseFloat(v[3]).toFixed(2)===by2){
+      el.classList.add('active');
+    } else {
+      el.classList.remove('active');
+    }
+  });
+}
+
+// Build preset thumbnails
+function makeThumbnailPath(px1,py1,px2,py2){
+  // 44x28 SVG viewBox: origin at (0,28), end at (44,0)
+  const W=44,H=28;
+  const ax=px1*W, ay=H-py1*H;
+  const bx=px2*W, by=H-py2*H;
+  return `M0,${H} C${ax},${ay} ${bx},${by} ${W},0`;
+}
+
+function buildPresets(){
+  const list = document.getElementById('presets-list');
+  PRESETS.forEach(p=>{
+    const [v1,v2,v3,v4]=p.vals;
+    const el=document.createElement('div');
+    el.className='preset-item';
+    el.dataset.vals=p.vals.join(',');
+    el.innerHTML=`
+      <div class="preset-thumb">
+        <svg viewBox="0 0 44 28" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M0,28 L44,0" stroke="rgba(255,255,255,0.08)" stroke-width="1"/>
+          <path d="${makeThumbnailPath(v1,v2,v3,v4)}" stroke="rgba(108,99,255,0.8)" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="preset-info">
+        <div class="preset-name">${p.name}</div>
+        <div class="preset-vals">${v1}, ${v2}, ${v3}, ${v4}</div>
+      </div>
+    `;
+    el.addEventListener('click',()=>{
+      x1=v1;y1=v2;x2=v3;y2=v4;
+      updateGraph();
+    });
+    list.appendChild(el);
+  });
+}
+
+// SVG pointer interaction
+function getSVGPoint(e){
+  const pt = svg.createSVGPoint();
+  const src = e.touches ? e.touches[0] : (e.changedTouches ? e.changedTouches[0] : e);
+  pt.x=src.clientX; pt.y=src.clientY;
+  const matrix = svg.getScreenCTM();
+  return matrix ? pt.matrixTransform(matrix.inverse()) : {x:0,y:G};
+}
+
+function startDrag(e,which){
+  if(e.type === 'touchstart') lastTouchStart = Date.now();
+  if(e.type === 'mousedown' && Date.now() - lastTouchStart < 700) return;
+  e.preventDefault();
+  e.stopPropagation();
+  dragging=which;
+  setStatus('Dragging');
+  if(e.pointerId !== undefined && e.currentTarget.setPointerCapture){
+    try { e.currentTarget.setPointerCapture(e.pointerId); } catch(err) {}
+  }
+  const move=(ev)=>{
+    if(!dragging)return;
+    ev.preventDefault();
+    ev.stopPropagation();
+    const pt=getSVGPoint(ev);
+    let nx=Math.max(0,Math.min(1,pt.x/G));
+    let ny=(G-pt.y)/G; // unbounded for Y
+    if(dragging==='a'){x1=nx;y1=clampY(ny);}
+    else{x2=nx;y2=clampY(ny);}
+    updateGraph();
+  };
+  const up=(ev)=>{
+    if(ev){
+      ev.preventDefault();
+      ev.stopPropagation();
+    }
+    dragging=null;
+    setStatus('Ready');
+    window.removeEventListener('pointermove',move);
+    window.removeEventListener('pointerup',up);
+    window.removeEventListener('pointercancel',up);
+    document.removeEventListener('mousemove',move);
+    document.removeEventListener('mouseup',up);
+    document.removeEventListener('touchmove',move);
+    document.removeEventListener('touchend',up);
+    document.removeEventListener('touchcancel',up);
+  };
+  if(window.PointerEvent && e.type === 'pointerdown'){
+    window.addEventListener('pointermove',move,{passive:false});
+    window.addEventListener('pointerup',up);
+    window.addEventListener('pointercancel',up);
+  } else {
+    document.addEventListener('mousemove',move);
+    document.addEventListener('mouseup',up);
+    document.addEventListener('touchmove',move,{passive:false});
+    document.addEventListener('touchend',up);
+    document.addEventListener('touchcancel',up);
+  }
+}
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+[
+  [ha,'a'], [haHit,'a'],
+  [hb,'b'], [hbHit,'b']
+].forEach(([target,which])=>{
+  if(window.PointerEvent && !isTouchDevice){
+    target.addEventListener('pointerdown',e=>startDrag(e,which),{passive:false});
+  }
+  target.addEventListener('mousedown',e=>startDrag(e,which));
+  target.addEventListener('touchstart',e=>startDrag(e,which),{passive:false});
+});
+
+// Numeric inputs
+function syncFromInputs(){
+  const v1=parseFloat(inpX1.value)||0;
+  const v2=parseFloat(inpY1.value)||0;
+  const v3=parseFloat(inpX2.value)||0;
+  const v4=parseFloat(inpY2.value)||0;
+  x1=Math.max(0,Math.min(1,v1));
+  y1=clampY(v2); x2=Math.max(0,Math.min(1,v3)); y2=clampY(v4);
+  updateGraph();
+}
+[inpX1,inpY1,inpX2,inpY2].forEach(inp=>{
+  inp.addEventListener('input',syncFromInputs);
+  inp.addEventListener('blur',()=>{inp.value=parseFloat(inp.value).toFixed(2);syncFromInputs();});
+});
+
+// Copy
+document.getElementById('topbar-copy').addEventListener('click',()=>{
+  navigator.clipboard.writeText(topCode.textContent).then(()=>{
+    copyFlash.classList.add('show');
+    setTimeout(()=>copyFlash.classList.remove('show'),2000);
+  });
+});
+
+// Property chips
+document.getElementById('prop-chips').addEventListener('click',e=>{
+  const chip=e.target.closest('.prop-chip');
+  if(!chip)return;
+  document.querySelectorAll('.prop-chip').forEach(c=>c.classList.remove('active'));
+  chip.classList.add('active');
+  activeProp=chip.dataset.prop;
+  stopAnim();
+  resetBall();
+});
+
+// Duration
+durationInput.addEventListener('input',()=>{
+  duration=parseFloat(durationInput.value);
+  durDisplay.textContent=duration.toFixed(1)+'s';
+});
+
+// Bezier sampler (CSS cubic-bezier approximation via Newton's method)
+function bezierY(t){
+  const cx=3*x1, bx=3*(x2-x1)-cx, ax=1-cx-bx;
+  const cy=3*y1, by=3*(y2-y1)-cy, ay=1-cy-by;
+  // sample t in [0,1], but 't' here is time param, we solve for bezier X = t (since CSS bezier uses x=time)
+  // For simplicity we'll do a direct parameterized sample: f(t)=y(t) and we already know x(t)=t approximately... 
+  // Actually for CSS cubic-bezier we need to map progress in X to Y. Let's do a quick Newton solve.
+  function sampleX(u){return ((ax*u+bx)*u+cx)*u;}
+  function sampleY(u){return ((ay*u+by)*u+cy)*u;}
+  function derivX(u){return (3*ax*u+2*bx)*u+cx;}
+  let u=t;
+  for(let i=0;i<8;i++){
+    const xErr=sampleX(u)-t;
+    if(Math.abs(xErr)<1e-6)break;
+    u-=xErr/derivX(u);
+  }
+  return sampleY(Math.max(0,Math.min(1,u)));
+}
+
+let animId=null;
+
+function playAnim(){
+  if(animPlaying)stopAnim();
+  animPlaying=true;
+  playBtn.textContent='Stop';
+  playBtn.classList.add('playing');
+  setStatus('Playing');
+  document.getElementById('bottombar').classList.add('recording');
+
+  const startTime=performance.now();
+  const dur=duration*1000;
+
+  function frame(now){
+    const elapsed=now-startTime;
+    const t=Math.min(1,elapsed/dur);
+    const eased=bezierY(t);
+
+    applyToPreview(eased);
+
+    if(t<1){
+      animId=requestAnimationFrame(frame);
+    } else {
+      animPlaying=false;
+      playBtn.innerHTML=`<svg class="play-icon" viewBox="0 0 12 12" fill="none"><path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" fill="currentColor"/></svg> Play`;
+      playBtn.classList.remove('playing');
+      setStatus('Ready');
+      document.getElementById('bottombar').classList.remove('recording');
+      // bounce back after short delay
+      setTimeout(()=>resetBall(),600);
+    }
+  }
+  animId=requestAnimationFrame(frame);
+}
+
+function stopAnim(){
+  if(animId)cancelAnimationFrame(animId);
+  animPlaying=false;
+  playBtn.innerHTML=`<svg class="play-icon" viewBox="0 0 12 12" fill="none"><path d="M2.5 1.5L10.5 6L2.5 10.5V1.5Z" fill="currentColor"/></svg> Play`;
+  playBtn.classList.remove('playing');
+  setStatus('Ready');
+  document.getElementById('bottombar').classList.remove('recording');
+}
+
+function resetBall(){
+  ball.style.transition='none';
+  applyToPreview(0);
+}
+
+function applyToPreview(eased){
+  const clamped=Math.max(-0.2,Math.min(1.2,eased));
+  if(activeProp==='x'){
+    ball.style.left=`${clamped*100}%`;
+    ball.style.transform=`translate(-50%, -50%)`;
+    ball.style.opacity='1';
+    ball.querySelector('.ball-ring').style.transform='scale(1)';
+  } else if(activeProp==='scale'){
+    const s=0.3+clamped*1.4;
+    ball.style.left='50%';
+    ball.style.transform=`translate(-50%,-50%) scale(${Math.max(0.01,s)})`;
+    ball.style.opacity='1';
+  } else if(activeProp==='rotate'){
+    const deg=clamped*360;
+    ball.style.left='50%';
+    ball.style.transform=`translate(-50%,-50%) rotate(${deg}deg)`;
+    ball.style.opacity='1';
+  } else if(activeProp==='opacity'){
+    ball.style.left='50%';
+    ball.style.transform='translate(-50%,-50%)';
+    ball.style.opacity=`${1-clamped}`;
+  }
+}
+
+playBtn.addEventListener('click',()=>{
+  if(animPlaying){stopAnim();resetBall();}
+  else playAnim();
+});
+
+function setStatus(s){
+  statusText.textContent=s;
+}
+
+// ── CURVE ANALYSIS ENGINE ──
+function sampleCurveY(steps){
+  const cx=3*x1, bx=3*(x2-x1)-cx, ax=1-cx-bx;
+  const cy=3*y1, by=3*(y2-y1)-cy, ay=1-cy-by;
+  function sX(u){return ((ax*u+bx)*u+cx)*u;}
+  function sY(u){return ((ay*u+by)*u+cy)*u;}
+  function dX(u){return (3*ax*u+2*bx)*u+cx;}
+  const pts=[];
+  for(let i=0;i<=steps;i++){
+    const t=i/steps;
+    let u=t;
+    for(let j=0;j<8;j++){const e=sX(u)-t;if(Math.abs(e)<1e-6)break;const d=dX(u);if(Math.abs(d)<1e-9)break;u-=e/d;}
+    u=Math.max(0,Math.min(1,u));
+    pts.push({t,y:sY(u)});
+  }
+  return pts;
+}
+
+function analyzeCurve(){
+  const N=60;
+  const pts=sampleCurveY(N);
+  const vels=[];
+  for(let i=1;i<pts.length;i++) vels.push((pts[i].y-pts[i-1].y)*N);
+
+  const maxVel=Math.max(...vels.map(Math.abs));
+  const minY=Math.min(...pts.map(p=>p.y));
+  const maxY=Math.max(...pts.map(p=>p.y));
+  const overshootUp=Math.max(0,maxY-1);
+  const overshootDown=Math.max(0,-minY);
+  const overshoot=Math.max(overshootUp,overshootDown);
+
+  const startVel=Math.abs(vels.slice(0,6).reduce((a,b)=>a+b,0)/6);
+  const endVel=Math.abs(vels.slice(-6).reduce((a,b)=>a+b,0)/6);
+
+  const absVels=vels.map(Math.abs);
+  const peakIdx=absVels.indexOf(Math.max(...absVels));
+  const peakPos=peakIdx/vels.length;
+
+  const avgVel=absVels.reduce((a,b)=>a+b,0)/absVels.length;
+  const variance=absVels.reduce((a,b)=>a+(b-avgVel)**2,0)/absVels.length;
+  const smoothness=Math.max(0,1-variance/4);
+
+  const isLinear=Math.abs(x1-x2)<0.08&&Math.abs(y1-y2)<0.08&&Math.abs(x1-y1)<0.12;
+  let pattern,patternTag;
+  if(isLinear){pattern='Linear';patternTag='linear';}
+  else if(startVel<0.4&&endVel>0.8){pattern='Ease In';patternTag='ease-in';}
+  else if(startVel>0.8&&endVel<0.4){pattern='Ease Out';patternTag='ease-out';}
+  else if(startVel<0.6&&endVel<0.6&&maxVel>1.3){pattern='Ease In Out';patternTag='ease-in-out';}
+  else if(overshoot>0.05){pattern='Spring';patternTag='spring';}
+  else if(startVel>1.2&&peakPos<0.25){pattern='Fast Start';patternTag='fast-start';}
+  else if(endVel>1.2&&peakPos>0.75){pattern='Fast End';patternTag='fast-end';}
+  else{pattern='Custom';patternTag='custom';}
+
+  const startDesc=startVel<0.35?'slow start':startVel>1.2?'fast start':'moderate start';
+  const endDesc=endVel<0.35?'gentle landing':endVel>1.2?'sharp finish':'gradual finish';
+  const overshootDesc=overshoot>0.04?` with <strong>${overshoot>0.15?'strong':'light'} spring</strong>`:'';
+  let summary=`<strong>${pattern}</strong> — ${startDesc}, ${endDesc}${overshootDesc}.`;
+  if(smoothness>0.8) summary+=' Very smooth.';
+  else if(smoothness<0.3) summary+=' Dramatic velocity shift.';
+
+  const tags=[];
+  tags.push({label:pattern,cls:'atag-pattern'});
+  if(overshoot>0.04) tags.push({label:`+${(overshoot*100).toFixed(0)}% spring`,cls:'atag-overshoot'});
+  if(maxVel>2.5) tags.push({label:'high velocity',cls:'atag-velocity'});
+  if(smoothness>0.75&&!overshoot>0.04) tags.push({label:'smooth',cls:'atag-smooth'});
+  if(isLinear) tags.push({label:'constant speed',cls:'atag-neutral'});
+
+  let useCases=[];
+  if(patternTag==='ease-out') useCases=['entering elements','expanding menus'];
+  else if(patternTag==='ease-in') useCases=['exiting elements','dismissing modals'];
+  else if(patternTag==='ease-in-out') useCases=['page transitions','sliding panels'];
+  else if(patternTag==='linear') useCases=['progress bars','looping animations'];
+  else if(patternTag==='spring') useCases=['spring buttons','bouncy reveals'];
+  else if(patternTag==='fast-start') useCases=['snappy switches','quick dismissals'];
+  else if(patternTag==='fast-end') useCases=['dramatic entrances','loading reveals'];
+  else useCases=['custom motion','experimental easing'];
+
+  document.getElementById('analysis-tags').innerHTML=tags.map(t=>`<span class="atag ${t.cls}">${t.label}</span>`).join('');
+  document.getElementById('analysis-summary').innerHTML=summary;
+
+  const cap=(v,max)=>Math.min(100,v/max*100).toFixed(0)+'%';
+  document.getElementById('m-velocity').textContent=maxVel.toFixed(2)+'×';
+  document.getElementById('m-velocity-bar').style.width=cap(maxVel,4);
+  document.getElementById('m-overshoot').textContent=overshoot>0.001?(overshoot*100).toFixed(1)+'%':'none';
+  document.getElementById('m-overshoot-bar').style.width=cap(overshoot,0.5);
+  document.getElementById('m-start').textContent=startVel.toFixed(2)+'×';
+  document.getElementById('m-start-bar').style.width=cap(startVel,3);
+  document.getElementById('m-end').textContent=endVel.toFixed(2)+'×';
+  document.getElementById('m-end-bar').style.width=cap(endVel,3);
+  document.getElementById('use-case').innerHTML=`Best for: <span>${useCases[0]}, ${useCases[1]}</span>`;
+}
+
+// ── OVERSHOOT TOGGLE ──
+const overshootToggle = document.getElementById('overshoot-toggle');
+const overshootSub = document.getElementById('overshoot-sub');
+
+function clampY(v){
+  return allowOvershoot ? v : Math.max(0, Math.min(1, v));
+}
+
+overshootToggle.addEventListener('click', () => {
+  allowOvershoot = !allowOvershoot;
+  overshootToggle.classList.toggle('on', allowOvershoot);
+  overshootSub.textContent = allowOvershoot ? 'Y unconstrained' : 'Y clamped 0–1';
+
+  // If turning off, clamp existing values immediately
+  if (!allowOvershoot) {
+    y1 = clampY(y1);
+    y2 = clampY(y2);
+    updateGraph();
+  }
+
+  // Update the SVG viewBox to zoom out or snap back
+  updateViewBox();
+});
+
+function updateViewBox() {
+  if (allowOvershoot) {
+    svg.setAttribute('viewBox', '-60 -60 420 420');
+  } else {
+    svg.setAttribute('viewBox', '-60 -60 420 420');
+  }
+}
+
+buildGrid();
+buildPresets();
+updateGraph();
+resetBall();
+
+window.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SET_BEZIER') {
+    if (typeof event.data.x1 === 'number') x1 = event.data.x1;
+    if (typeof event.data.y1 === 'number') y1 = event.data.y1;
+    if (typeof event.data.x2 === 'number') x2 = event.data.x2;
+    if (typeof event.data.y2 === 'number') y2 = event.data.y2;
+    updateGraph();
+  }
+});
+</script>
+</body>
+</html>

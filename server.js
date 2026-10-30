@@ -151,11 +151,13 @@ const server = http.createServer((req, res) => {
 
   // 4. If NOT authorized: stream ONLY Edge Gate Login HTML (Zero assets leaked)
   if (!isAuthorized) {
-    // Read the HTML template directly from _middleware.js or deliver the built-in gate
-    const middlewarePath = path.join(__dirname, 'functions', '_middleware.js');
+    // Read the HTML template directly from worker.js or functions/_middleware.js
     let gateHtml = '';
-    if (fs.existsSync(middlewarePath)) {
-      const content = fs.readFileSync(middlewarePath, 'utf8');
+    const workerPath = path.join(__dirname, 'worker.js');
+    const middlewarePath = path.join(__dirname, 'functions', '_middleware.js');
+    const targetFile = fs.existsSync(workerPath) ? workerPath : (fs.existsSync(middlewarePath) ? middlewarePath : null);
+    if (targetFile) {
+      const content = fs.readFileSync(targetFile, 'utf8');
       const match = content.match(/function getEdgeGateHtml\(\) \{\s*return `([\s\S]*?)`;\s*\}/);
       if (match) gateHtml = match[1];
     }

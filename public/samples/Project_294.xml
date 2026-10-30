@@ -1,0 +1,52 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<!--
+Created by Alight Motion (http://alightmotion.com)
+Exported: 2026-10-06 04:42 PM
+6.2.59 (868)
+-->
+<scene title="Project Name 294" width="1080" height="1350" exportWidth="1920" exportHeight="1080" bgcolor="#FF000000" totalTime="3999" fps="60" modifiedTime="1791322937892" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="freeze">
+  <embedScene id="6" label="Seperate Rectangle" startTime="0" endTime="3999" fillType="intrinsic">
+    <transform>
+      <location value="540.000000,675.000000,0.000000"/>
+      <pivot value="0.750122,0.000000"/>
+    </transform>
+    <fillColor value="#FF000000"/>
+    <scene title="" width="1082" height="1352" exportWidth="1082" exportHeight="1352" bgcolor="#00000000" totalTime="3999" fps="60" modifiedTime="0" amver="868" ffver="107" am="com.alightcreative.motion/6.2.59" amplatform="ios" precompose="dynamicResolution" retime="off">
+      <shape id="1" label="Rectangle 1" startTime="0" endTime="3999" fillType="color" s=".rect">
+        <transform>
+          <location value="621.999878,675.000000,0.000000"/>
+          <scale value="0.812500,4.062500"/>
+        </transform>
+        <fillColor value="#FF4B8ED2"/>
+      </shape>
+      <shape id="2" label="Rectangle 1 Copy" startTime="0" endTime="3999" fillType="color" s=".rect">
+        <transform>
+          <location value="784.499817,675.000000,0.000000"/>
+          <scale value="0.812500,4.062500"/>
+        </transform>
+        <fillColor value="#FF4B8ED2"/>
+      </shape>
+      <shape id="3" label="Rectangle 1 Copy 2" startTime="0" endTime="3999" fillType="color" s=".rect">
+        <transform>
+          <location value="459.499878,675.000000,0.000000"/>
+          <scale value="0.812500,4.062500"/>
+        </transform>
+        <fillColor value="#FF4B8ED2"/>
+      </shape>
+      <shape id="4" label="Rectangle 1 Copy 3" startTime="0" endTime="3999" fillType="color" s=".rect">
+        <transform>
+          <location value="297.000488,675.000000,0.000000"/>
+          <scale value="0.812500,4.062500"/>
+        </transform>
+        <fillColor value="#FF4B8ED2"/>
+      </shape>
+    </scene>
+  </embedScene>
+  <shape id="5" label="Rectangle to fit" startTime="0" endTime="3999" fillType="color" s=".rect">
+    <transform>
+      <location value="540.000000,675.000000,0.000000"/>
+      <scale value="3.250000,4.062500"/>
+    </transform>
+    <fillColor value="#FF8D5AF3"/>
+  </shape>
+</scene>
