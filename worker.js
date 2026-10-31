@@ -12,6 +12,12 @@ const AUTHORIZED_KEYS = {
   "fa694fcc4ab7be81ba6b8d601880bcf9f4c4f657f34f20b0be0446463a23b7d3": { user: "Marcus", role: "member", maxDevices: 1 },
   // Sarah: FLIPPY-USER-SARAH
   "b44740cfa7b0272e230af2b83cbeef18def7d6b282cfe0810c0589d039f94775": { user: "Sarah", role: "member", maxDevices: 1 },
+  // Kingdom: FLIPPY-USER-KINGDOM
+  "33ad58fde95c763e2062908abab3ac5dcdaf2d838527997cf382dd9d4e59af5d": { user: "Kingdom", role: "member", maxDevices: 1 },
+  // CJ: FLIPPY-USER-CJ
+  "46dfb1bc7eec26ebd4357924a6da9ce898d00c7eef9adfd995dae9a1c28e3214": { user: "CJ", role: "member", maxDevices: 1 },
+  // VIP: FLIPPY-USER-VIP
+  "9b1af68f54ea936b7099b4b8ce6c75a36b0370169e2ce14234bd526024d3fb7d": { user: "VIP", role: "member", maxDevices: 1 },
 };
 
 const DEVICE_LOCK_STORE = new Map();
