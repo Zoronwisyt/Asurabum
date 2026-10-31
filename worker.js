@@ -18,6 +18,69 @@ const AUTHORIZED_KEYS = {
 
 const DEVICE_LOCK_STORE = new Map();
 
+// Dedicated Persistent Global Cloud Lock Registry ID
+const CLOUD_SYNC_STORE_ID = "ff808181a09d98f701a18f515f3c6aa4";
+
+async function getBoundDevice(keyHash, env) {
+  // 1. Cloudflare KV if bound
+  if (env && env.FLIPPY_KV) {
+    try {
+      const val = await env.FLIPPY_KV.get("lock:" + keyHash);
+      if (val) return val;
+    } catch (e) {}
+  }
+  // 2. Global Cloud Sync Store
+  try {
+    const res = await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID);
+    if (res.ok) {
+      const json = await res.json();
+      const map = json.data || {};
+      if (map[keyHash]) return map[keyHash];
+    }
+  } catch (e) {}
+  // 3. Local isolate memory fallback
+  return DEVICE_LOCK_STORE.get(keyHash) || null;
+}
+
+async function setBoundDevice(keyHash, deviceId, env) {
+  // 1. Cloudflare KV if bound
+  if (env && env.FLIPPY_KV) {
+    try {
+      await env.FLIPPY_KV.put("lock:" + keyHash, deviceId);
+    } catch (e) {}
+  }
+  // 2. Global Cloud Sync Store
+  try {
+    const res = await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID);
+    if (res.ok) {
+      const json = await res.json();
+      const map = json.data || {};
+      map[keyHash] = deviceId;
+      await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "flippy_v3_asurabum_registry", data: map })
+      });
+    }
+  } catch (e) {}
+  // 3. Local isolate memory
+  DEVICE_LOCK_STORE.set(keyHash, deviceId);
+}
+
+async function clearAllDeviceLocks(env) {
+  if (env && env.FLIPPY_KV) {
+    // Note: KV individual keys or prefix listing
+  }
+  try {
+    await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "flippy_v3_asurabum_registry", data: {} })
+    });
+  } catch (e) {}
+  DEVICE_LOCK_STORE.clear();
+}
+
 async function sha256Hex(str) {
   const enc = new TextEncoder().encode(str);
   const buf = await crypto.subtle.digest("SHA-256", enc);
@@ -67,15 +130,36 @@ export default {
     // Diagnostic Telemetry Endpoint
     if (url.pathname === "/__flippy_status") {
       const isKvBound = !!(env && env.FLIPPY_KV);
+      let cloudLocks = {};
+      try {
+        const res = await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID);
+        if (res.ok) cloudLocks = (await res.json()).data || {};
+      } catch (e) {}
       return new Response(JSON.stringify({
         status: "online",
         edge_runtime: "Cloudflare Workers",
         run_worker_first: true,
         kv_persistence_active: isKvBound,
-        instruction: isKvBound 
-          ? "Cloudflare KV is active. Device locking is permanently synchronized across all edge nodes."
-          : "Cloudflare KV is not bound yet. Bind FLIPPY_KV in Cloudflare Dashboard -> Settings -> Bindings -> KV Namespace to enable cross-device blocking."
+        cloud_sync_active: true,
+        locked_devices_count: Object.keys(cloudLocks).length,
+        active_cloud_locks: cloudLocks
       }, null, 2), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    // Admin Reset Endpoint (Clear all locked devices)
+    if (url.pathname === "/__flippy_reset") {
+      const resetKey = (url.searchParams.get("key") || "").trim();
+      if (resetKey !== "AjDybantsaisass") {
+        return new Response(JSON.stringify({ error: "Unauthorized: Invalid admin key" }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      await clearAllDeviceLocks(env);
+      return new Response(JSON.stringify({ success: true, message: "All device locks cleared successfully." }), {
         status: 200,
         headers: { "Content-Type": "application/json" }
       });
@@ -109,15 +193,9 @@ export default {
           });
         }
 
-        // Device lock check with persistent Cloudflare KV support
+        // Strict Cross-Device Lock Check
         if (match.maxDevices === 1) {
-          let boundDevice = null;
-          if (env && env.FLIPPY_KV) {
-            boundDevice = await env.FLIPPY_KV.get("lock:" + keyHash);
-          } else {
-            boundDevice = DEVICE_LOCK_STORE.get(keyHash);
-          }
-
+          const boundDevice = await getBoundDevice(keyHash, env);
           if (boundDevice && boundDevice !== deviceId) {
             return new Response(JSON.stringify({ 
               error: "Key locked to another device. Contact admin to reset." 
@@ -126,12 +204,7 @@ export default {
               headers: { "Content-Type": "application/json" }
             });
           }
-
-          if (env && env.FLIPPY_KV) {
-            await env.FLIPPY_KV.put("lock:" + keyHash, deviceId);
-          } else {
-            DEVICE_LOCK_STORE.set(keyHash, deviceId);
-          }
+          await setBoundDevice(keyHash, deviceId, env);
         }
 
         // 7-day session token
