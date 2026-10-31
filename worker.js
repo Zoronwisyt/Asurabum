@@ -6,12 +6,6 @@
 const DEFAULT_SECRET = "FLIPPY_SECRET_SALT_2026_9b83f0c1";
 
 const AUTHORIZED_KEYS = {
-  // Alex: FLIPPY-USER-ALEX
-  "eab139d3e50d1a55d849144f1f154a58ee8ef473c54a3be4c2cc9d1606ff6ee0": { user: "Alex", role: "member", maxDevices: 1 },
-  // Marcus: FLIPPY-USER-MARCUS
-  "fa694fcc4ab7be81ba6b8d601880bcf9f4c4f657f34f20b0be0446463a23b7d3": { user: "Marcus", role: "member", maxDevices: 1 },
-  // Sarah: FLIPPY-USER-SARAH
-  "b44740cfa7b0272e230af2b83cbeef18def7d6b282cfe0810c0589d039f94775": { user: "Sarah", role: "member", maxDevices: 1 },
   // Kingdom: FLIPPY-USER-KINGDOM
   "33ad58fde95c763e2062908abab3ac5dcdaf2d838527997cf382dd9d4e59af5d": { user: "Kingdom", role: "member", maxDevices: 1 },
   // CJ: FLIPPY-USER-CJ
