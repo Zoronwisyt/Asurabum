@@ -78,9 +78,6 @@
       // Revoking a person's key only requires removing their hash entry below.
       // =========================================================================
       var AUTHORIZED_KEYS = {
-        // Master Key: "AjDybantsaisass"
-        "a01f14a8e7bc95384d3e02bc1a7cf0b624f8d334e40988b21d8dd5cf45cedc7c": { user: "Master Admin", role: "admin" },
-
         // User Key 1: "FLIPPY-USER-ALEX"
         "eab139d3e50d1a55d849144f1f154a58ee8ef473c54a3be4c2cc9d1606ff6ee0": { user: "Alex", role: "member" },
 
@@ -236,11 +233,6 @@
         // 2. Client-side fallback check
         var keyHash = computeSha256(val);
         var match = AUTHORIZED_KEYS[keyHash];
-
-        // Legacy compatibility fallback
-        if (!match && val === 'AjDybantsaisass') {
-          match = { user: 'Master Admin', role: 'admin' };
-        }
 
         if (match) {
           if (error) error.classList.remove('show');

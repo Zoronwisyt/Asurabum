@@ -6,8 +6,6 @@
 const DEFAULT_SECRET = "FLIPPY_SECRET_SALT_2026_9b83f0c1";
 
 const AUTHORIZED_KEYS = {
-  // Master Admin: AjDybantsaisass
-  "a01f14a8e7bc95384d3e02bc1a7cf0b624f8d334e40988b21d8dd5cf45cedc7c": { user: "Master Admin", role: "admin", maxDevices: 5 },
   // Alex: FLIPPY-USER-ALEX
   "eab139d3e50d1a55d849144f1f154a58ee8ef473c54a3be4c2cc9d1606ff6ee0": { user: "Alex", role: "member", maxDevices: 1 },
   // Marcus: FLIPPY-USER-MARCUS
@@ -68,9 +66,18 @@ async function setBoundDevice(keyHash, deviceId, env) {
 }
 
 async function clearAllDeviceLocks(env) {
+  // 1. Delete all keys from Cloudflare KV
   if (env && env.FLIPPY_KV) {
-    // Note: KV individual keys or prefix listing
+    try {
+      const list = await env.FLIPPY_KV.list({ prefix: "lock:" });
+      if (list && list.keys) {
+        for (const k of list.keys) {
+          await env.FLIPPY_KV.delete(k.name);
+        }
+      }
+    } catch (e) {}
   }
+  // 2. Clear cloud registry
   try {
     await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID, {
       method: "PUT",
@@ -78,6 +85,7 @@ async function clearAllDeviceLocks(env) {
       body: JSON.stringify({ name: "flippy_v3_asurabum_registry", data: {} })
     });
   } catch (e) {}
+  // 3. Clear local isolate memory
   DEVICE_LOCK_STORE.clear();
 }
 
@@ -181,10 +189,6 @@ export default {
 
         const keyHash = await sha256Hex(rawKey);
         let match = AUTHORIZED_KEYS[keyHash];
-
-        if (!match && rawKey === "AjDybantsaisass") {
-          match = { user: "Master Admin", role: "admin", maxDevices: 5 };
-        }
 
         if (!match) {
           return new Response(JSON.stringify({ error: "Access Denied: Invalid Key." }), {
