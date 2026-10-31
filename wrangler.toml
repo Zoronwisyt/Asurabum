@@ -6,9 +6,3 @@ compatibility_date = "2026-01-01"
 directory = "./public"
 binding = "ASSETS"
 run_worker_first = true
-
-[[kv_namespaces]]
-binding = "FLIPPY_KV"
-# Note: Replace with your 32-character KV namespace ID from Cloudflare Dashboard -> Storage & Databases -> KV
-# Or if Cloudflare auto-generated a PR, merge their PR directly into GitHub
-id = "FLIPPY_KV"
