@@ -79,6 +79,17 @@ const server = http.createServer((req, res) => {
   const urlObj = new URL(req.url, `http://${req.headers.host}`);
   const pathname = urlObj.pathname;
 
+  // Diagnostic Endpoint
+  if (pathname === '/__flippy_status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      status: "online",
+      runtime: "Local Node.js Edge Simulator",
+      disk_persistence_active: true,
+      active_locks: getDeviceLocks()
+    }, null, 2));
+  }
+
   // 1. Auth Endpoint
   if (pathname === '/__flippy_auth' && req.method === 'POST') {
     let body = '';

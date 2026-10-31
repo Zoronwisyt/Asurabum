@@ -64,6 +64,23 @@ export default {
     const url = new URL(request.url);
     const secret = (env && env.FLIPPY_SECRET) || DEFAULT_SECRET;
 
+    // Diagnostic Telemetry Endpoint
+    if (url.pathname === "/__flippy_status") {
+      const isKvBound = !!(env && env.FLIPPY_KV);
+      return new Response(JSON.stringify({
+        status: "online",
+        edge_runtime: "Cloudflare Workers",
+        run_worker_first: true,
+        kv_persistence_active: isKvBound,
+        instruction: isKvBound 
+          ? "Cloudflare KV is active. Device locking is permanently synchronized across all edge nodes."
+          : "Cloudflare KV is not bound yet. Bind FLIPPY_KV in Cloudflare Dashboard -> Settings -> Bindings -> KV Namespace to enable cross-device blocking."
+      }, null, 2), {
+        status: 200,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
     // Handle Authentication API
     if (url.pathname === "/__flippy_auth" && request.method === "POST") {
       try {
