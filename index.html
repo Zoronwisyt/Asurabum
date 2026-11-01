@@ -207,7 +207,7 @@
           var res = await fetch('/__flippy_auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: val, deviceId: devId })
+            body: JSON.stringify({ key: val, deviceId: devId, mode: (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'app' : 'web' })
           });
           var data = await res.json();
           if (res.ok && data.success) {

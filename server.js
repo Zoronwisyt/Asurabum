@@ -97,6 +97,7 @@ const server = http.createServer((req, res) => {
         const parsed = JSON.parse(body || '{}');
         const rawKey = (parsed.key || '').trim();
         const devId = (parsed.deviceId || '').trim().slice(0, 64) || 'dev_unknown';
+        const slotSuffix = parsed.mode === 'app' ? ':app' : '';
 
         if (!rawKey) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -114,12 +115,12 @@ const server = http.createServer((req, res) => {
         // Device Lock check with persistent disk storage
         if (match.maxDevices === 1) {
           const locks = getDeviceLocks();
-          const bound = locks[keyHash];
+          const bound = locks[keyHash + slotSuffix];
           if (bound && bound !== devId) {
             res.writeHead(403, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'Key locked to another device. Contact admin to reset.' }));
           }
-          saveDeviceLock(keyHash, devId);
+          saveDeviceLock(keyHash + slotSuffix, devId);
         }
 
         const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000;

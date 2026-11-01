@@ -179,6 +179,8 @@ export default {
         const body = await request.json();
         const rawKey = (body.key || "").trim();
         const deviceId = (body.deviceId || "").trim().slice(0, 64) || "unknown_dev";
+        // Home-screen apps (PWA) run in storage separate from the browser, so each context gets its own slot.
+        const slotSuffix = body.mode === "app" ? ":app" : "";
 
         if (!rawKey) {
           return new Response(JSON.stringify({ error: "Please enter an access key." }), {
@@ -199,7 +201,7 @@ export default {
 
         // Strict Cross-Device Lock Check
         if (match.maxDevices === 1) {
-          const boundDevice = await getBoundDevice(keyHash, env);
+          const boundDevice = await getBoundDevice(keyHash + slotSuffix, env);
           if (boundDevice && boundDevice !== deviceId) {
             return new Response(JSON.stringify({ 
               error: "Key locked to another device. Contact admin to reset." 
@@ -208,7 +210,7 @@ export default {
               headers: { "Content-Type": "application/json" }
             });
           }
-          await setBoundDevice(keyHash, deviceId, env);
+          await setBoundDevice(keyHash + slotSuffix, deviceId, env);
         }
 
         // 7-day session token
@@ -532,7 +534,7 @@ function getEdgeGateHtml() {
           var res = await fetch('/__flippy_auth', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ key: key, deviceId: devId })
+            body: JSON.stringify({ key: key, deviceId: devId, mode: (window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)) ? 'app' : 'web' })
           });
           var data = await res.json();
           if (res.ok && data.success) {
