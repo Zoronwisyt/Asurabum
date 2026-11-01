@@ -441,6 +441,38 @@ export default {
         }
       }
 
+      // Safe Binary Stream Endpoint (Zero Client Ad-Redirects)
+      if (url.pathname === "/__flippy_yt_stream") {
+        const src = (url.searchParams.get("src") || "").trim();
+        if (!src) {
+          return ytJsonResponse(400, { success: false, error: "Missing stream src" });
+        }
+        try {
+          const targetUrl = new URL(src);
+          if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
+            return ytJsonResponse(400, { success: false, error: "Invalid stream URL" });
+          }
+          const streamRes = await fetch(targetUrl.href, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15",
+              "Referer": "https://p.savenow.to/"
+            },
+            redirect: "follow"
+          });
+          const contentType = streamRes.headers.get("content-type") || "";
+          if (contentType.includes("text/html")) {
+            return ytJsonResponse(502, { success: false, error: "Upstream ad blocked" });
+          }
+          const headers = new Headers(YT_CORS_HEADERS);
+          headers.set("Content-Type", contentType || "video/mp4");
+          headers.set("Content-Disposition", 'attachment; filename="video.mp4"');
+          headers.set("Cache-Control", "no-store");
+          return new Response(streamRes.body, { status: 200, headers });
+        } catch (e) {
+          return ytJsonResponse(502, { success: false, error: "Stream proxy error: " + e.message });
+        }
+      }
+
       if (env && env.ASSETS) {
         return await env.ASSETS.fetch(request);
       }

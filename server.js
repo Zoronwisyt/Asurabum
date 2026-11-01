@@ -6,10 +6,39 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const { spawn, spawnSync } = require('child_process');
 const crypto = require('crypto');
 
 const PORT = process.env.PORT || 3000;
 const SECRET = process.env.FLIPPY_SECRET || "FLIPPY_SECRET_SALT_2026_9b83f0c1";
+
+// Standalone FFmpeg & Python yt-dlp detection
+const STANDALONE_FFMPEG = 'C:\\Users\\jeduc\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\imageio_ffmpeg\\binaries\\ffmpeg-win-x86_64-v7.1.exe';
+const FFMPEG_BIN = fs.existsSync(STANDALONE_FFMPEG) ? STANDALONE_FFMPEG : (process.env.FFMPEG_PATH || 'ffmpeg');
+
+let HAS_YTDLP = false;
+try {
+  const check = spawnSync('python', ['-m', 'yt_dlp', '--version'], { encoding: 'utf8', timeout: 5000 });
+  HAS_YTDLP = (check.status === 0);
+} catch (_) {
+  HAS_YTDLP = false;
+}
+
+// In-memory active direct video jobs (100% ad-free & popup-free)
+const ACTIVE_YT_JOBS = new Map();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of ACTIVE_YT_JOBS.entries()) {
+    if (now - job.createdAt > 30 * 60 * 1000) {
+      try {
+        if (fs.existsSync(job.filePath)) fs.unlinkSync(job.filePath);
+      } catch (_) {}
+      ACTIVE_YT_JOBS.delete(id);
+    }
+  }
+}, 5 * 60 * 1000);
 
 // Whitelisted SHA-256 Hashes
 const AUTHORIZED_KEYS = {
@@ -187,7 +216,7 @@ const server = http.createServer(async (req, res) => {
 
   // Direct MP4 Stream Proxy Routes (Mobile / iPhone Photos & Desktop)
   if (pathname === '/__flippy_yt_ping') {
-    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer' });
+    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', ytdlp: HAS_YTDLP });
   }
 
   if (pathname === '/__flippy_yt_dl') {
@@ -204,6 +233,85 @@ const server = http.createServer(async (req, res) => {
       return sendYtJson(res, 403, { success: false, error: compliance.reason });
     }
 
+    // High-performance, 100% ad-free & popup-free local yt-dlp execution
+    if (HAS_YTDLP) {
+      const jobId = 'yt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 6);
+      const isAudio = (format === 'mp3' || format === 'm4a' || format === 'wav' || format === 'flac' || format === 'aac' || format === 'opus');
+      const outExt = isAudio ? (format === 'aac' ? 'm4a' : format) : 'mp4';
+      const outFilePath = path.join(os.tmpdir(), `${jobId}.${outExt}`);
+
+      const jobRecord = {
+        id: jobId,
+        status: 'processing',
+        progress: 150,
+        text: 'Downloading clean stream...',
+        filePath: outFilePath,
+        ext: outExt,
+        download_url: `/__flippy_yt_stream?id=${jobId}`,
+        createdAt: Date.now()
+      };
+      ACTIVE_YT_JOBS.set(jobId, jobRecord);
+
+      let fmtSelector;
+      if (isAudio) {
+        fmtSelector = 'bestaudio/best';
+      } else {
+        const heightMap = { '4k': 2160, '1440': 1440, '1080': 1080, '720': 720, '480': 480, '360': 360 };
+        const h = heightMap[format] || 1080;
+        fmtSelector = `bestvideo[height<=${h}][ext=mp4]+bestaudio[ext=m4a]/bestvideo[height<=${h}]+bestaudio/best[height<=${h}]/best`;
+      }
+
+      const args = [
+        '-m', 'yt_dlp',
+        '--no-playlist',
+        '--no-warnings',
+        '--js-runtimes', 'node:node',
+        '--remote-components', 'ejs:github',
+        '--ffmpeg-location', FFMPEG_BIN,
+        '-f', fmtSelector
+      ];
+
+      if (isAudio) {
+        args.push('-x', '--audio-format', outExt);
+      } else {
+        args.push('--merge-output-format', 'mp4');
+      }
+
+      args.push('-o', outFilePath, ytUrl);
+
+      const proc = spawn('python', args, { stdio: ['ignore', 'pipe', 'pipe'] });
+      jobRecord.proc = proc;
+
+      proc.stdout.on('data', chunk => {
+        const str = chunk.toString();
+        const m = str.match(/(\d+(?:\.\d+)?)%/);
+        if (m) {
+          const pct = Math.min(990, Math.round(parseFloat(m[1]) * 10));
+          jobRecord.progress = Math.max(jobRecord.progress, pct);
+          jobRecord.text = `Downloading: ${m[1]}%`;
+        }
+      });
+
+      proc.on('close', code => {
+        if (code === 0 && fs.existsSync(outFilePath)) {
+          jobRecord.status = 'ready';
+          jobRecord.progress = 1000;
+          jobRecord.text = 'Finished';
+        } else {
+          jobRecord.status = 'failed';
+          jobRecord.text = 'Download failed';
+          jobRecord.error = `yt-dlp exited with code ${code}`;
+        }
+      });
+
+      return sendYtJson(res, 200, {
+        id: jobId,
+        success: true,
+        text: 'Initiated clean MP4 stream',
+        progress: 150
+      });
+    }
+
     try {
       const data = await fetchUpstreamYtJson('/api/v2/download', {
         button: '1',
@@ -213,7 +321,7 @@ const server = http.createServer(async (req, res) => {
       });
       return sendYtJson(res, 200, data);
     } catch (err) {
-      return sendYtJson(res, 502, { success: false, error: err.message || 'Upstream muxer unreachable' });
+      return sendYtJson(res, 502, { success: false, error: err.message || 'Stream engine unreachable' });
     }
   }
 
@@ -222,12 +330,118 @@ const server = http.createServer(async (req, res) => {
     if (!id) {
       return sendYtJson(res, 400, { success: false, error: 'Missing conversion job id' });
     }
+
+    if (ACTIVE_YT_JOBS.has(id)) {
+      const job = ACTIVE_YT_JOBS.get(id);
+      if (job.status === 'ready') {
+        return sendYtJson(res, 200, {
+          success: 1,
+          progress: 1000,
+          text: 'Finished',
+          download_url: job.download_url
+        });
+      } else if (job.status === 'failed') {
+        return sendYtJson(res, 200, {
+          success: 0,
+          progress: 1000,
+          text: job.error || 'Conversion failed'
+        });
+      } else {
+        return sendYtJson(res, 200, {
+          success: 0,
+          progress: job.progress || 200,
+          text: job.text || 'Processing'
+        });
+      }
+    }
+
     try {
       const data = await fetchUpstreamYtJson('/api/progress', { id });
       return sendYtJson(res, 200, data);
     } catch (err) {
       return sendYtJson(res, 502, { success: false, error: err.message || 'Progress poll failed' });
     }
+  }
+
+  // Direct Binary Stream Endpoint (Zero Popups, Zero Third-Party Ad Redirects)
+  if (pathname === '/__flippy_yt_stream') {
+    const id = (urlObj.searchParams.get('id') || '').trim();
+    const src = (urlObj.searchParams.get('src') || '').trim();
+
+    if (id && ACTIVE_YT_JOBS.has(id)) {
+      const job = ACTIVE_YT_JOBS.get(id);
+      if (job.status !== 'ready' || !fs.existsSync(job.filePath)) {
+        return sendYtJson(res, 404, { success: false, error: 'Stream not ready or expired' });
+      }
+
+      const stat = fs.statSync(job.filePath);
+      const totalSize = stat.size;
+      const mime = job.ext === 'mp3' ? 'audio/mpeg' : (job.ext === 'm4a' ? 'audio/mp4' : (job.ext === 'wav' ? 'audio/wav' : 'video/mp4'));
+      const filename = `flippy_video_${id}.${job.ext}`;
+
+      const range = req.headers.range;
+      setYtCors(res);
+      res.setHeader('Content-Type', mime);
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Accept-Ranges', 'bytes');
+
+      if (range) {
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+        const chunkSize = (end - start) + 1;
+        const fileStream = fs.createReadStream(job.filePath, { start, end });
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${end}/${totalSize}`,
+          'Content-Length': chunkSize
+        });
+        return fileStream.pipe(res);
+      } else {
+        res.writeHead(200, { 'Content-Length': totalSize });
+        return fs.createReadStream(job.filePath).pipe(res);
+      }
+    }
+
+    if (src) {
+      try {
+        const targetUrl = new URL(src);
+        if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
+          return sendYtJson(res, 400, { success: false, error: 'Invalid stream URL' });
+        }
+
+        const upstreamRes = await fetch(targetUrl.href, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+            'Referer': 'https://p.savenow.to/'
+          },
+          redirect: 'follow'
+        });
+
+        const contentType = upstreamRes.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          return sendYtJson(res, 502, { success: false, error: 'Blocked upstream ad redirect' });
+        }
+
+        setYtCors(res);
+        res.writeHead(200, {
+          'Content-Type': contentType || 'video/mp4',
+          'Content-Disposition': 'attachment; filename="video.mp4"',
+          'Cache-Control': 'no-store'
+        });
+
+        const reader = upstreamRes.body.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          res.write(value);
+        }
+        return res.end();
+      } catch (e) {
+        return sendYtJson(res, 502, { success: false, error: 'Upstream stream proxy failed: ' + e.message });
+      }
+    }
+
+    return sendYtJson(res, 400, { success: false, error: 'Missing stream id or src' });
   }
 
   // Diagnostic Endpoint

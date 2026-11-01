@@ -576,7 +576,7 @@
     }
 
     // Fallback on Desktop or browsers without file-sharing sheet: save the .MP4 directly
-    var targetHref = state.readyMedia.blobUrl || state.readyMedia.directUrl;
+    var targetHref = state.readyMedia.blobUrl;
     if (targetHref) {
       triggerBrowserDownload(targetHref, state.readyMedia.filename || 'video.mp4');
       if (btnLabel) {
@@ -585,32 +585,28 @@
           btnLabel.textContent = isIOSDevice() ? 'Save Video to iPhone Photos' : 'Save / Share .MP4 Video';
         }, 2500);
       }
+    } else if (state.readyMedia.directUrl && state.backendApiBase) {
+      var safeStream = state.readyMedia.directUrl.startsWith('http')
+        ? (state.backendApiBase + '/__flippy_yt_stream?src=' + encodeURIComponent(state.readyMedia.directUrl))
+        : (state.backendApiBase + state.readyMedia.directUrl);
+      triggerBrowserDownload(safeStream, state.readyMedia.filename || 'video.mp4');
     }
   }
 
-  // Tier 2 & 3 Static Fallback when no local/edge proxy is running (NEVER emits .bat!)
+  // Fallback when no local/edge proxy is running (100% popup-free & ad-free)
   function activateStaticMp4Fallback(ytWatchUrl, muxFmt) {
-    var curTheme = document.documentElement.getAttribute('data-theme') || 'jade';
-    var btnHex = curTheme === 'crimson' ? 'f43f5e' : (curTheme === 'light' ? '089960' : '10d988');
-    var embedUrl = 'https://p.savenow.to/api/button/?url=' + encodeURIComponent(ytWatchUrl) + '&f=' + encodeURIComponent(muxFmt) + '&color=' + btnHex + '&ads=1';
-    var embedWrap = document.getElementById('ytcEmbedFallbackWrap');
-    var embedFrame = document.getElementById('ytcEmbedFrame');
-    var embedTag = document.getElementById('ytcEmbedFormatTag');
     var progText = document.getElementById('ytcProgressStatus');
     var progFill = document.getElementById('ytcProgressBarFill');
+    var progWrap = document.getElementById('ytcProgressWrap');
+    var dlBtn = document.getElementById('ytcDownloadBtn');
+    var dlLabel = document.getElementById('ytcDownloadBtnLabel');
 
-    if (embedTag) embedTag.textContent = muxFmt.toUpperCase() + ' .' + getOutputExtension().toUpperCase();
-
-    if (window.location.protocol === 'http:' || window.location.protocol === 'https:') {
-      if (embedFrame) embedFrame.src = embedUrl;
-      if (embedWrap) embedWrap.style.display = 'flex';
-      if (progFill) progFill.style.width = '100%';
-      if (progText) progText.textContent = 'Direct .MP4 converter ready below — tap the button inside to save your .MP4!';
-    } else {
-      // Opened via file:/// with local server stopped: launch standalone Direct MP4 mini-window
-      window.open(embedUrl, 'FlippyDirectMP4', 'width=460,height=190,menubar=no,toolbar=no,location=no,status=no');
-      if (progFill) progFill.style.width = '100%';
-      if (progText) progText.textContent = 'Opened Direct .MP4 Downloader window (run "node server.js" for inline iPhone Photos buffering).';
+    if (progWrap) progWrap.style.display = 'flex';
+    if (progFill) progFill.style.width = '0%';
+    if (dlBtn) dlBtn.disabled = false;
+    if (dlLabel) dlLabel.textContent = 'Download .MP4 Video';
+    if (progText) {
+      progText.textContent = 'Stream server offline. Please start "node server.js" on port 3000 for 100% ad-free & popup-free downloads.';
     }
   }
 
@@ -697,13 +693,21 @@
         throw new Error('Timed out waiting for MP4 muxer. Try 1080p preset.');
       }
 
-      // Step 3: Buffer real .MP4 binary stream (CORS: *) for instant preview & iPhone Photos Web Share!
+      // Step 3: Buffer real .MP4 binary stream (100% ad-free & popup-free)
       if (progFill) progFill.style.width = '65%';
       if (progText) progText.textContent = 'Downloading .' + outExt.toUpperCase() + ' file to device memory...';
 
+      var streamUrl = directDownloadUrl;
+      if (!streamUrl.startsWith('http')) {
+        streamUrl = apiBase + streamUrl;
+      } else if (!streamUrl.startsWith(apiBase) && apiBase) {
+        // Route third-party download URL through safe server proxy to prevent any ad redirects
+        streamUrl = apiBase + '/__flippy_yt_stream?src=' + encodeURIComponent(streamUrl);
+      }
+
       var mediaBlob = null;
       try {
-        var mediaRes = await fetch(directDownloadUrl);
+        var mediaRes = await fetch(streamUrl);
         if (mediaRes.ok && mediaRes.body && typeof mediaRes.body.getReader === 'function') {
           var contentLen = Number(mediaRes.headers.get('content-length')) || 0;
           var reader = mediaRes.body.getReader();
@@ -741,7 +745,7 @@
       var directLink = document.getElementById('ytcDirectMp4Link');
       var savePhotosLabel = document.getElementById('ytcSaveToPhotosLabel');
 
-      state.readyMedia.directUrl = directDownloadUrl;
+      state.readyMedia.directUrl = streamUrl;
       state.readyMedia.filename = finalFilename;
       if (readyFilenameEl) readyFilenameEl.textContent = finalFilename;
 
@@ -761,10 +765,10 @@
           directLink.textContent = '⬇ Save .' + outExt.toUpperCase() + ' File';
         }
       } else {
-        // Direct attachment stream URL fallback
+        // Safe same-origin stream fallback — NEVER exposes third-party ad URL to <a>
         if (player) player.style.display = 'none';
         if (directLink) {
-          directLink.href = directDownloadUrl;
+          directLink.href = streamUrl;
           directLink.download = finalFilename;
           directLink.textContent = '⬇ Download .' + outExt.toUpperCase() + ' Directly';
         }
@@ -786,8 +790,13 @@
       if (usePhotosShareFirst) {
         if (progText) progText.textContent = '✓ MP4 Ready! Tap "Save Video to iPhone Photos" below → choose "Save Video".';
       } else {
-        triggerBrowserDownload(state.readyMedia.blobUrl || directDownloadUrl, finalFilename);
-        if (progText) progText.textContent = '✓ Downloaded real .' + outExt.toUpperCase() + ' file (' + finalFilename + ')!';
+        var dlTarget = state.readyMedia.blobUrl || (streamUrl.startsWith(apiBase) ? streamUrl : null);
+        if (dlTarget) {
+          triggerBrowserDownload(dlTarget, finalFilename);
+          if (progText) progText.textContent = '✓ Downloaded real .' + outExt.toUpperCase() + ' file (' + finalFilename + ')!';
+        } else {
+          if (progText) progText.textContent = '✓ Ready! Click "Save .' + outExt.toUpperCase() + ' File" below to download.';
+        }
       }
 
       // Record in session queue
