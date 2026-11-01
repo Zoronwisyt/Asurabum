@@ -138,6 +138,15 @@ export default {
     // Diagnostic Telemetry Endpoint
     if (url.pathname === "/__flippy_status") {
       const isKvBound = !!(env && env.FLIPPY_KV);
+      let kvLocks = [];
+      if (isKvBound) {
+        try {
+          const list = await env.FLIPPY_KV.list({ prefix: "lock:" });
+          if (list && list.keys) {
+            kvLocks = list.keys.map(k => k.name);
+          }
+        } catch (e) {}
+      }
       let cloudLocks = {};
       try {
         const res = await fetch("https://api.restful-api.dev/objects/" + CLOUD_SYNC_STORE_ID);
@@ -148,6 +157,7 @@ export default {
         edge_runtime: "Cloudflare Workers",
         run_worker_first: true,
         kv_persistence_active: isKvBound,
+        kv_stored_locks: kvLocks,
         cloud_sync_active: true,
         locked_devices_count: Object.keys(cloudLocks).length,
         active_cloud_locks: cloudLocks
