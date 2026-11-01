@@ -12,6 +12,8 @@ const AUTHORIZED_KEYS = {
   "46dfb1bc7eec26ebd4357924a6da9ce898d00c7eef9adfd995dae9a1c28e3214": { user: "CJ", role: "member", maxDevices: 1 },
   // VIP: FLIPPY-USER-VIP
   "9b1af68f54ea936b7099b4b8ce6c75a36b0370169e2ce14234bd526024d3fb7d": { user: "VIP", role: "member", maxDevices: 1 },
+  // Gojo: FLIPPY-USER-GOJO
+  "cf4447344d3819c58c999b4060f6c5d4f9d2c3bbfb67d8f80f4fc7d2ddc7697a": { user: "Gojo", role: "member", maxDevices: 1 },
 };
 
 const DEVICE_LOCK_STORE = new Map();
@@ -128,6 +130,108 @@ function parseCookies(header) {
     }
   }
   return map;
+}
+
+const YT_BLOCKED_CHANNELS = [
+  "crunchyroll", "crunchyroll collection", "crunchyroll dubs",
+  "netflix", "netflix anime", "toei animation", "muse asia",
+  "ani-one asia", "aniplex", "vizmedia", "viz media", "funimation",
+  "kadokawa", "kadokawaanime", "mappa", "mappa channel", "gundaminfo",
+  "bandai namco", "tms entertainment", "pony canyon", "toho animation",
+  "shonen jump", "sony pictures", "sony pictures entertainment",
+  "warner bros. pictures", "warner bros", "universal pictures",
+  "paramount pictures", "walt disney studios", "marvel entertainment",
+  "20th century studios", "lionsgate movies", "mgm", "a24",
+  "youtube movies", "prime video", "hulu", "peacock", "hbo", "max"
+];
+
+const YT_BLOCKED_TITLE_PATTERNS = [
+  /\bfull\s+movie\b/i,
+  /\bfull\s+episode\b/i,
+  /\b(?:episode|ep\.?)\s*\d+\s*(?:\||-|\[|\(|full|eng\s*sub|sub|dub)/i,
+  /\bs\d{1,2}\s*e\d{1,3}\b/i,
+  /\b(?:eng(?:lish)?\s+sub(?:s|titled)?|multi\s*sub)\b.*\b(?:episode|ep\.?\s*\d+|anime)\b/i,
+  /\b(?:anime\s+full\s+episode|official\s+episode)\b/i,
+  /\b(?:complete\s+feature\s+film|official\s+full\s+movie)\b/i
+];
+
+const YT_ALLOWED_FORMATS = new Set([
+  "4k", "1440", "1080", "720", "480", "360",
+  "mp3", "m4a", "aac", "flac", "opus", "wav", "webm"
+]);
+
+const YT_CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Accept"
+};
+
+function ytJsonResponse(status, obj) {
+  return new Response(JSON.stringify(obj), {
+    status,
+    headers: {
+      ...YT_CORS_HEADERS,
+      "Content-Type": "application/json; charset=utf-8"
+    }
+  });
+}
+
+async function verifyYoutubeCompliance(ytUrl) {
+  try {
+    const oembedUrl = "https://www.youtube.com/oembed?url=" + encodeURIComponent(ytUrl) + "&format=json";
+    const r = await fetch(oembedUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!r.ok) return { allowed: true };
+    const meta = await r.json();
+    const author = String(meta.author_name || "").toLowerCase().trim();
+    const title = String(meta.title || "").trim();
+
+    for (const ch of YT_BLOCKED_CHANNELS) {
+      if (author === ch || author.includes(ch)) {
+        return {
+          allowed: false,
+          reason: `Restricted Channel: "${meta.author_name}" is a protected Movie / Anime distributor.`
+        };
+      }
+    }
+    for (const pat of YT_BLOCKED_TITLE_PATTERNS) {
+      if (pat.test(title)) {
+        return {
+          allowed: false,
+          reason: "Restricted Content: Title matches protected Full Movie or Anime Episode broadcast pattern."
+        };
+      }
+    }
+    return { allowed: true };
+  } catch (_) {
+    return { allowed: true };
+  }
+}
+
+async function fetchUpstreamYtJson(pathname, queryObj) {
+  const hosts = ["https://p.savenow.to", "https://p.lbserver.xyz"];
+  const qs = new URLSearchParams(queryObj).toString();
+  let lastErr = null;
+
+  for (const host of hosts) {
+    try {
+      const r = await fetch(`${host}${pathname}?${qs}`, {
+        method: "GET",
+        headers: {
+          "Origin": host,
+          "Referer": `${host}/api/button/`,
+          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+          "Accept": "application/json"
+        }
+      });
+      if (r.ok) {
+        return await r.json();
+      }
+      lastErr = new Error(`Upstream HTTP ${r.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error("Upstream MP4 muxer unavailable");
 }
 
 export default {
@@ -287,8 +391,56 @@ export default {
       }
     }
 
-    // If authenticated: stream actual site assets
+    if (request.method === "OPTIONS" && url.pathname.startsWith("/__flippy_yt_")) {
+      return new Response(null, { status: 204, headers: YT_CORS_HEADERS });
+    }
+
+    // If authenticated: handle Direct MP4 YT Converter routes or stream actual site assets
     if (isAuthenticated) {
+      if (url.pathname === "/__flippy_yt_ping") {
+        return ytJsonResponse(200, { ok: true, engine: "flippy-v3-edge-mp4" });
+      }
+
+      if (url.pathname === "/__flippy_yt_dl") {
+        const ytUrl = (url.searchParams.get("url") || "").trim();
+        const rawFmt = (url.searchParams.get("format") || "1080").trim().toLowerCase();
+        const format = YT_ALLOWED_FORMATS.has(rawFmt) ? rawFmt : "1080";
+
+        if (!ytUrl || !/(?:youtube\.com|youtu\.be)/i.test(ytUrl)) {
+          return ytJsonResponse(400, { success: false, error: "Invalid YouTube URL" });
+        }
+
+        const compliance = await verifyYoutubeCompliance(ytUrl);
+        if (!compliance.allowed) {
+          return ytJsonResponse(403, { success: false, error: compliance.reason });
+        }
+
+        try {
+          const data = await fetchUpstreamYtJson("/api/v2/download", {
+            button: "1",
+            format,
+            iframe_source: url.origin + "/",
+            url: ytUrl
+          });
+          return ytJsonResponse(200, data);
+        } catch (err) {
+          return ytJsonResponse(502, { success: false, error: err.message || "Upstream muxer failed" });
+        }
+      }
+
+      if (url.pathname === "/__flippy_yt_progress") {
+        const id = (url.searchParams.get("id") || "").trim();
+        if (!id) {
+          return ytJsonResponse(400, { success: false, error: "Missing conversion job id" });
+        }
+        try {
+          const data = await fetchUpstreamYtJson("/api/progress", { id });
+          return ytJsonResponse(200, data);
+        } catch (err) {
+          return ytJsonResponse(502, { success: false, error: err.message || "Progress poll failed" });
+        }
+      }
+
       if (env && env.ASSETS) {
         return await env.ASSETS.fetch(request);
       }
@@ -312,27 +464,30 @@ function getEdgeGateHtml() {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>FLIPPY STUDIO · Edge Access Gate</title>
+  <meta name="theme-color" content="#050908">
+  <title>FLIPPY STUDIO · Obsidian Edge Gate</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <style>
     :root {
-      --bg: #07090e;
-      --card-bg: rgba(14, 18, 28, 0.85);
-      --border: rgba(255, 255, 255, 0.08);
-      --border-glow: rgba(6, 182, 212, 0.4);
-      --cyan: #06b6d4;
-      --cyan-rgb: 6, 182, 212;
-      --text: #f1f5f9;
-      --text-dim: #94a3b8;
-      --red: #ef4444;
+      --bg: #050908;
+      --card-bg: rgba(11, 21, 17, 0.88);
+      --border: rgba(190, 242, 218, 0.11);
+      --border-glow: rgba(16, 217, 136, 0.42);
+      --jade: #10d988;
+      --jade-rgb: 16, 217, 136;
+      --gold: #f0b44c;
+      --gold-rgb: 240, 180, 76;
+      --text: #edf6f2;
+      --text-dim: #9cb3aa;
+      --red: #f43f5e;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'Space Grotesk', sans-serif;
+      font-family: 'Outfit', sans-serif;
       min-height: 100vh;
       display: flex;
       align-items: center;
@@ -345,23 +500,23 @@ function getEdgeGateHtml() {
       position: absolute;
       inset: -50%;
       background: 
-        radial-gradient(circle at 50% 50%, rgba(var(--cyan-rgb), 0.12) 0%, transparent 60%),
-        radial-gradient(circle at 80% 20%, rgba(168, 85, 247, 0.08) 0%, transparent 50%);
+        radial-gradient(circle at 50% 45%, rgba(var(--jade-rgb), 0.13) 0%, transparent 58%),
+        radial-gradient(circle at 82% 20%, rgba(var(--gold-rgb), 0.08) 0%, transparent 48%);
       pointer-events: none;
       animation: pulse 12s ease-in-out infinite alternate;
     }
-    @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.15) rotate(2deg); } }
+    @keyframes pulse { 0% { transform: scale(1); } 100% { transform: scale(1.14) rotate(2deg); } }
     .gate-card {
       position: relative;
       width: 100%;
       max-width: 440px;
       background: var(--card-bg);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
+      backdrop-filter: blur(22px);
+      -webkit-backdrop-filter: blur(22px);
       border: 1px solid var(--border);
       border-radius: 20px;
       padding: 40px 32px;
-      box-shadow: 0 25px 60px rgba(0,0,0,0.6), 0 0 40px rgba(var(--cyan-rgb), 0.08);
+      box-shadow: 0 28px 65px rgba(0,0,0,0.72), 0 0 42px rgba(var(--jade-rgb), 0.09);
       text-align: center;
       z-index: 10;
     }
@@ -371,11 +526,11 @@ function getEdgeGateHtml() {
       gap: 6px;
       padding: 4px 12px;
       border-radius: 999px;
-      background: rgba(var(--cyan-rgb), 0.1);
-      border: 1px solid rgba(var(--cyan-rgb), 0.25);
-      color: var(--cyan);
+      background: rgba(var(--jade-rgb), 0.11);
+      border: 1px solid rgba(var(--jade-rgb), 0.30);
+      color: var(--jade);
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       margin-bottom: 20px;
@@ -385,13 +540,13 @@ function getEdgeGateHtml() {
       width: 6px;
       height: 6px;
       border-radius: 50%;
-      background: var(--cyan);
-      box-shadow: 0 0 8px var(--cyan);
+      background: var(--jade);
+      box-shadow: 0 0 8px var(--jade);
     }
     h1 {
-      font-size: 1.6rem;
-      font-weight: 700;
-      letter-spacing: -0.02em;
+      font-size: 1.7rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
       margin-bottom: 8px;
     }
     p.desc {
@@ -410,7 +565,7 @@ function getEdgeGateHtml() {
       padding: 0 48px 0 18px;
       border-radius: 12px;
       border: 1px solid var(--border);
-      background: rgba(5, 7, 12, 0.7);
+      background: rgba(4, 9, 7, 0.78);
       color: #fff;
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.95rem;
@@ -420,8 +575,8 @@ function getEdgeGateHtml() {
       transition: all 0.25s ease;
     }
     input:focus {
-      border-color: var(--cyan);
-      box-shadow: 0 0 0 3px rgba(var(--cyan-rgb), 0.15), 0 0 25px rgba(var(--cyan-rgb), 0.1);
+      border-color: var(--jade);
+      box-shadow: 0 0 0 3px rgba(var(--jade-rgb), 0.16), 0 0 25px rgba(var(--jade-rgb), 0.12);
     }
     .pw-eye {
       position: absolute;
@@ -438,29 +593,29 @@ function getEdgeGateHtml() {
       align-items: center;
       justify-content: center;
     }
-    .pw-eye:hover { color: var(--cyan); }
+    .pw-eye:hover { color: var(--jade); }
     .btn-submit {
       width: 100%;
       height: 52px;
-      background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+      background: linear-gradient(125deg, #10d988 0%, #2dd4bf 55%, #f0b44c 100%);
       border: none;
       border-radius: 12px;
-      color: #000;
-      font-family: 'Space Grotesk', sans-serif;
-      font-weight: 700;
+      color: #03130c;
+      font-family: 'Outfit', sans-serif;
+      font-weight: 800;
       font-size: 0.95rem;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.05em;
       cursor: pointer;
       display: flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
       transition: all 0.25s ease;
-      box-shadow: 0 4px 20px rgba(var(--cyan-rgb), 0.35);
+      box-shadow: 0 6px 24px rgba(var(--jade-rgb), 0.35);
     }
     .btn-submit:hover {
       transform: translateY(-1px);
-      box-shadow: 0 6px 25px rgba(var(--cyan-rgb), 0.5);
+      box-shadow: 0 8px 28px rgba(var(--jade-rgb), 0.5);
     }
     .btn-submit:active { transform: translateY(1px); }
     .err-msg {
@@ -476,7 +631,7 @@ function getEdgeGateHtml() {
     .err-msg.show { opacity: 1; transform: translateY(0); }
     .footer-note {
       margin-top: 24px;
-      color: rgba(255,255,255,0.25);
+      color: rgba(237, 246, 242, 0.28);
       font-size: 0.72rem;
       font-family: 'JetBrains Mono', monospace;
       letter-spacing: 0.05em;
@@ -486,8 +641,8 @@ function getEdgeGateHtml() {
 <body>
   <div class="edge-mesh"></div>
   <div class="gate-card">
-    <div class="gate-badge">Cloudflare Edge Gate</div>
-    <h1>FLIPPY<span style="font-weight:300;color:var(--cyan)">STUDIO</span></h1>
+    <div class="gate-badge">Obsidian Edge Gate</div>
+    <h1>FLIPPY<span style="font-weight:400;color:var(--jade);margin-left:6px">STUDIO</span></h1>
     <p class="desc">Enter your whitelisted access key to verify identity and stream workspace assets.</p>
 
     <div class="field-group">
@@ -549,7 +704,7 @@ function getEdgeGateHtml() {
           var data = await res.json();
           if (res.ok && data.success) {
             submitBtn.innerHTML = 'GRANTED · REDIRECTING...';
-            submitBtn.style.background = '#10b981';
+            submitBtn.style.background = '#10d988';
             window.location.reload();
           } else {
             showError(data.error || 'Access denied.');

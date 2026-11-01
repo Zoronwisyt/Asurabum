@@ -29,7 +29,7 @@
     videoLayer: false,
     videoUri: 'am-internal:///4BA32805414BE561BE374FA7D5B88C4BF8261057.MP4',
     videoDurationMs: 10450,
-    solidColor: '#64E4DC',
+    solidColor: '#10D988',
     wipeAngle: 0,
     wipeSoftness: 0,
     aspectLocked: true,
@@ -3781,22 +3781,27 @@
   // =========================================================================
   const navTabStudio = $('#navTabStudio');
   const navTabConverter = $('#navTabConverter');
+  const navTabYtConverter = $('#navTabYtConverter');
   const navTabHollowBox = $('#navTabHollowBox');
   const controlsPanelElem = $('#controls-panel');
   const previewPanelElem = $('#preview-panel');
   const dataPanelElem = $('#data-panel');
   const converterPanelElem = $('#converter-panel');
+  const ytconverterPanelElem = $('#ytconverter-panel');
   const hollowboxPanelElem = $('#hollowboxPanel');
 
   function switchMainTab(tabName) {
     const isMobile = window.innerWidth <= 800 || (window.innerHeight <= 520 && window.innerWidth <= 960);
+    [navTabStudio, navTabConverter, navTabYtConverter, navTabHollowBox].forEach(b => {
+      if (b) b.classList.remove('active');
+    });
+
     if (tabName === 'converter') {
       if (navTabConverter) navTabConverter.classList.add('active');
-      if (navTabStudio) navTabStudio.classList.remove('active');
-      if (navTabHollowBox) navTabHollowBox.classList.remove('active');
       if (controlsPanelElem) controlsPanelElem.style.display = 'none';
       if (previewPanelElem) previewPanelElem.style.display = 'none';
       if (dataPanelElem) dataPanelElem.style.display = 'none';
+      if (ytconverterPanelElem) ytconverterPanelElem.style.display = 'none';
       if (hollowboxPanelElem) hollowboxPanelElem.style.display = 'none';
       if (converterPanelElem) {
         converterPanelElem.style.display = isMobile ? 'block' : 'flex';
@@ -3804,7 +3809,6 @@
         converterPanelElem.style.visibility = 'visible';
         converterPanelElem.style.pointerEvents = 'auto';
       }
-      // If mobile tabs exist, also activate the Converter mobile tab
       const mobileTabConv = document.getElementById('mobileTabConverter');
       const mobileConvBtn = document.querySelector('.mobile-tab[data-tab="mobileTabConverter"]');
       if (mobileConvBtn && mobileTabConv) {
@@ -3813,21 +3817,43 @@
         mobileConvBtn.classList.add('active');
         mobileTabConv.classList.add('active');
       }
-    } else if (tabName === 'hollowbox') {
-      if (navTabHollowBox) navTabHollowBox.classList.add('active');
-      if (navTabStudio) navTabStudio.classList.remove('active');
-      if (navTabConverter) navTabConverter.classList.remove('active');
+    } else if (tabName === 'ytconverter') {
+      if (navTabYtConverter) navTabYtConverter.classList.add('active');
       if (controlsPanelElem) controlsPanelElem.style.display = 'none';
       if (previewPanelElem) previewPanelElem.style.display = 'none';
       if (dataPanelElem) dataPanelElem.style.display = 'none';
       if (converterPanelElem) converterPanelElem.style.display = 'none';
+      if (hollowboxPanelElem) hollowboxPanelElem.style.display = 'none';
+      if (ytconverterPanelElem) {
+        ytconverterPanelElem.style.display = isMobile ? 'block' : 'flex';
+        ytconverterPanelElem.style.opacity = '1';
+        ytconverterPanelElem.style.visibility = 'visible';
+        ytconverterPanelElem.style.pointerEvents = 'auto';
+      }
+      const mobileTabYtc = document.getElementById('mobileTabYtConverter');
+      const mobileYtcBtn = document.querySelector('.mobile-tab[data-tab="mobileTabYtConverter"]');
+      if (mobileYtcBtn && mobileTabYtc) {
+        document.querySelectorAll('.mobile-tab').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.mobile-tab-content').forEach(tc => tc.classList.remove('active'));
+        mobileYtcBtn.classList.add('active');
+        mobileTabYtc.classList.add('active');
+      }
+      if (window.YtConverterStudio && typeof window.YtConverterStudio.init === 'function') {
+        window.YtConverterStudio.init();
+      }
+    } else if (tabName === 'hollowbox') {
+      if (navTabHollowBox) navTabHollowBox.classList.add('active');
+      if (controlsPanelElem) controlsPanelElem.style.display = 'none';
+      if (previewPanelElem) previewPanelElem.style.display = 'none';
+      if (dataPanelElem) dataPanelElem.style.display = 'none';
+      if (converterPanelElem) converterPanelElem.style.display = 'none';
+      if (ytconverterPanelElem) ytconverterPanelElem.style.display = 'none';
       if (hollowboxPanelElem) {
         hollowboxPanelElem.style.display = isMobile ? 'block' : 'flex';
         hollowboxPanelElem.style.opacity = '1';
         hollowboxPanelElem.style.visibility = 'visible';
         hollowboxPanelElem.style.pointerEvents = 'auto';
       }
-      // If mobile tabs exist, also activate the Hollow Box mobile tab
       const mobileTabHb = document.getElementById('mobileTabHollowBox');
       const mobileHbBtn = document.querySelector('.mobile-tab[data-tab="mobileTabHollowBox"]');
       if (mobileHbBtn && mobileTabHb) {
@@ -3841,14 +3867,12 @@
       }
     } else {
       if (navTabStudio) navTabStudio.classList.add('active');
-      if (navTabConverter) navTabConverter.classList.remove('active');
-      if (navTabHollowBox) navTabHollowBox.classList.remove('active');
       if (controlsPanelElem) controlsPanelElem.style.display = '';
       if (previewPanelElem) previewPanelElem.style.display = '';
       if (dataPanelElem) dataPanelElem.style.display = '';
       if (converterPanelElem) converterPanelElem.style.display = 'none';
+      if (ytconverterPanelElem) ytconverterPanelElem.style.display = 'none';
       if (hollowboxPanelElem) hollowboxPanelElem.style.display = 'none';
-      // If mobile tabs exist, also activate the Inspector mobile tab
       const mobileTabInsp = document.getElementById('mobileTabConfig');
       const mobileInspBtn = document.querySelector('.mobile-tab[data-tab="mobileTabConfig"]');
       if (mobileInspBtn && mobileTabInsp) {
@@ -3866,6 +3890,9 @@
   }
   if (navTabConverter) {
     navTabConverter.addEventListener('click', () => switchMainTab('converter'));
+  }
+  if (navTabYtConverter) {
+    navTabYtConverter.addEventListener('click', () => switchMainTab('ytconverter'));
   }
   if (navTabHollowBox) {
     navTabHollowBox.addEventListener('click', () => switchMainTab('hollowbox'));
@@ -4051,7 +4078,7 @@
         // Color extraction
         const fillColElem = shape.querySelector('fillColor');
         const rawHex = fillColElem ? fillColElem.getAttribute('value') : null;
-        let displayColor = '#64e4dc';
+        let displayColor = '#10d988';
         if (rawHex) {
           if (rawHex.length === 9 && rawHex.startsWith('#')) {
             displayColor = '#' + rawHex.slice(3);
@@ -5583,9 +5610,18 @@
 
       // Clear & Background
       ctx.clearRect(0, 0, W, H);
+      const curTheme = document.documentElement.getAttribute('data-theme') || 'jade';
       const bgGrad = ctx.createRadialGradient(cx, cy, 30, cx, cy, W * 0.7);
-      bgGrad.addColorStop(0, '#0c102c');
-      bgGrad.addColorStop(1, '#02040b');
+      if (curTheme === 'light') {
+        bgGrad.addColorStop(0, '#e3ede8');
+        bgGrad.addColorStop(1, '#cfded6');
+      } else if (curTheme === 'crimson') {
+        bgGrad.addColorStop(0, '#1f0b12');
+        bgGrad.addColorStop(1, '#080406');
+      } else {
+        bgGrad.addColorStop(0, '#0b1e18');
+        bgGrad.addColorStop(1, '#030806');
+      }
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, W, H);
 
@@ -5637,7 +5673,7 @@
       }
 
       // Draw Perspective Floor Grid
-      ctx.strokeStyle = 'rgba(150, 160, 255, 0.08)';
+      ctx.strokeStyle = curTheme === 'light' ? 'rgba(16, 48, 36, 0.10)' : (curTheme === 'crimson' ? 'rgba(244, 63, 94, 0.10)' : 'rgba(16, 217, 136, 0.10)');
       ctx.lineWidth = 1;
       for (let gx = -300; gx <= 300; gx += 60) {
         const p1 = project3D(gx, 240, -300, 0, 0, 0, 0, 0, 0);
@@ -5726,8 +5762,8 @@
           140, 175, 140,
           0, 0, 0,
           0, 40, 0,
-          'rgba(46, 230, 255, 0.45)',
-          'rgba(46, 230, 255, 0.04)',
+          curTheme === 'light' ? 'rgba(8, 153, 96, 0.65)' : (curTheme === 'crimson' ? 'rgba(244, 63, 94, 0.55)' : 'rgba(16, 217, 136, 0.55)'),
+          curTheme === 'light' ? 'rgba(8, 153, 96, 0.07)' : (curTheme === 'crimson' ? 'rgba(244, 63, 94, 0.05)' : 'rgba(16, 217, 136, 0.05)'),
           'Original HB (Outer Shell)',
           true
         );
@@ -5745,8 +5781,8 @@
           state.posX * 0.45,
           (state.posY * 0.45) - 15,
           state.posZ * 0.45,
-          '#ff4fd8',
-          'rgba(255, 79, 216, 0.15)',
+          curTheme === 'light' ? '#b87a14' : (curTheme === 'crimson' ? '#fb923c' : '#f0b44c'),
+          curTheme === 'light' ? 'rgba(184, 122, 20, 0.14)' : (curTheme === 'crimson' ? 'rgba(251, 146, 60, 0.16)' : 'rgba(240, 180, 76, 0.16)'),
           'Settings (Inner HB)',
           false
         );
@@ -6196,6 +6232,7 @@
     renderStepsUI();
     updateTimelineScrubberMarks();
     renderHollowBoxXML();
+    window.addEventListener('flippy:themechange', () => renderHollowBoxPreviewCanvas(hbState.currentTimeMs));
     setTimeout(() => renderHollowBoxPreviewCanvas(0), 100);
   })();
 
@@ -6210,15 +6247,17 @@
     const controlsPanel = document.getElementById('controls-panel');
     const previewPanel  = document.getElementById('preview-panel');
     const dataPanel     = document.getElementById('data-panel');
-    const converterPanel = document.getElementById('converter-panel');
-    const hollowboxPanel = document.getElementById('hollowboxPanel');
+    const converterPanel   = document.getElementById('converter-panel');
+    const ytconverterPanel = document.getElementById('ytconverter-panel');
+    const hollowboxPanel   = document.getElementById('hollowboxPanel');
 
     // Mobile slots
-    const mobileConfigSlot    = document.getElementById('mobileConfigSlot');
-    const mobilePreviewSlot   = document.getElementById('mobilePreviewSlot');
-    const mobileDataSlot      = document.getElementById('mobileDataSlot');
-    const mobileConverterSlot = document.getElementById('mobileConverterSlot');
-    const mobileHollowBoxSlot = document.getElementById('mobileHollowBoxSlot');
+    const mobileConfigSlot      = document.getElementById('mobileConfigSlot');
+    const mobilePreviewSlot     = document.getElementById('mobilePreviewSlot');
+    const mobileDataSlot        = document.getElementById('mobileDataSlot');
+    const mobileConverterSlot   = document.getElementById('mobileConverterSlot');
+    const mobileYtConverterSlot = document.getElementById('mobileYtConverterSlot');
+    const mobileHollowBoxSlot   = document.getElementById('mobileHollowBoxSlot');
     const mobileTabBar        = document.getElementById('mobileTabBar');
 
     if (!mobileConfigSlot || !mobilePreviewSlot || !mobileDataSlot || !mobileTabBar) return;
@@ -6250,7 +6289,7 @@
     }
 
     // Save origins on first load
-    [controlsBody, canvasContainer, playbackControls, formulasCard, tableContainer, xmlSection, converterPanel, hollowboxPanel]
+    [controlsBody, canvasContainer, playbackControls, formulasCard, tableContainer, xmlSection, converterPanel, ytconverterPanel, hollowboxPanel]
       .forEach(saveOrigin);
 
     function moveToMobile() {
@@ -6265,6 +6304,10 @@
         converterPanel.style.display = 'block';
         mobileConverterSlot.appendChild(converterPanel);
       }
+      if (ytconverterPanel && mobileYtConverterSlot) {
+        ytconverterPanel.style.display = 'block';
+        mobileYtConverterSlot.appendChild(ytconverterPanel);
+      }
       if (hollowboxPanel && mobileHollowBoxSlot) {
         hollowboxPanel.style.display = 'block';
         mobileHollowBoxSlot.appendChild(hollowboxPanel);
@@ -6272,13 +6315,15 @@
     }
 
     function moveToDesktop() {
-      [controlsBody, canvasContainer, playbackControls, formulasCard, tableContainer, xmlSection, converterPanel, hollowboxPanel]
+      [controlsBody, canvasContainer, playbackControls, formulasCard, tableContainer, xmlSection, converterPanel, ytconverterPanel, hollowboxPanel]
         .forEach(restoreOrigin);
-      // Restore desktop active tab display
       const isConverterActive = navTabConverter && navTabConverter.classList.contains('active');
+      const isYtConverterActive = navTabYtConverter && navTabYtConverter.classList.contains('active');
       const isHollowBoxActive = navTabHollowBox && navTabHollowBox.classList.contains('active');
       if (isConverterActive) {
         switchMainTab('converter');
+      } else if (isYtConverterActive) {
+        switchMainTab('ytconverter');
       } else if (isHollowBoxActive) {
         switchMainTab('hollowbox');
       } else {
@@ -6312,10 +6357,19 @@
       mobileHeaderDlBtn.addEventListener('click', (e) => {
         e.preventDefault();
         const converterTab = document.getElementById('mobileTabConverter');
+        const ytconverterTab = document.getElementById('mobileTabYtConverter');
         const hollowboxTab = document.getElementById('mobileTabHollowBox');
         if (converterTab && converterTab.classList.contains('active')) {
           const btnDl = document.getElementById('btnDownloadConvertedXml');
           if (btnDl) btnDl.click();
+        } else if (ytconverterTab && ytconverterTab.classList.contains('active')) {
+          const btnYtDl = document.getElementById('ytcDownloadBtn');
+          if (btnYtDl && !btnYtDl.disabled) {
+            btnYtDl.click();
+          } else {
+            const urlInp = document.getElementById('ytcUrlInput');
+            if (urlInp) urlInp.focus();
+          }
         } else if (hollowboxTab && hollowboxTab.classList.contains('active')) {
           const btnDl = document.getElementById('hbDownloadXmlBtn');
           if (btnDl) btnDl.click();
@@ -6376,6 +6430,11 @@
         if (mobileHeaderDlText) {
           if (targetId === 'mobileTabConverter') {
             mobileHeaderDlText.textContent = 'Download Media XML';
+          } else if (targetId === 'mobileTabYtConverter') {
+            mobileHeaderDlText.textContent = 'Download MP4';
+            if (window.YtConverterStudio && typeof window.YtConverterStudio.init === 'function') {
+              window.YtConverterStudio.init();
+            }
           } else if (targetId === 'mobileTabHollowBox') {
             mobileHeaderDlText.textContent = 'Download HB XML';
           } else {
@@ -6405,6 +6464,9 @@
       setTimeout(updateTabGlider, 60);
     };
 
+    if (window.YtConverterStudio && typeof window.YtConverterStudio.init === 'function') {
+      window.YtConverterStudio.init();
+    }
     checkLayout();
     setTimeout(updateTabGlider, 120);
   })();

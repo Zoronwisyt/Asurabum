@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="jade">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Flippy Studio v3 — Holographic Alight Motion XML &amp; 3D Wipe Engine</title>
   <meta name="description" content="Flippy Studio v3: a futuristic multi-layer wipe, flip, cube and box animator that exports Alight Motion XML with live spring-driven previews.">
-  <meta name="theme-color" content="#05060d">
+  <meta name="theme-color" content="#050908" id="metaThemeColor">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;500;600;700;800&family=Sora:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3.3">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css?v=4.0">
 </head>
 <body class="locked">
 
@@ -64,6 +64,16 @@
 
   <script>
     (function () {
+      try {
+        var savedTheme = localStorage.getItem('flippy_v3_theme');
+        if (savedTheme === 'jade' || savedTheme === 'crimson' || savedTheme === 'light') {
+          document.documentElement.setAttribute('data-theme', savedTheme);
+          var metaCol = document.getElementById('metaThemeColor');
+          if (metaCol) {
+            metaCol.setAttribute('content', savedTheme === 'light' ? '#edf3f0' : (savedTheme === 'crimson' ? '#090608' : '#050908'));
+          }
+        }
+      } catch (e) {}
       var overlay = document.getElementById('password-overlay');
       var card = document.getElementById('accessCard');
       var input = document.getElementById('website-password');
@@ -85,7 +95,10 @@
         "46dfb1bc7eec26ebd4357924a6da9ce898d00c7eef9adfd995dae9a1c28e3214": { user: "CJ", role: "member" },
 
         // User Key 3: "FLIPPY-USER-VIP"
-        "9b1af68f54ea936b7099b4b8ce6c75a36b0370169e2ce14234bd526024d3fb7d": { user: "VIP", role: "member" }
+        "9b1af68f54ea936b7099b4b8ce6c75a36b0370169e2ce14234bd526024d3fb7d": { user: "VIP", role: "member" },
+
+        // User Key 4: "FLIPPY-USER-GOJO"
+        "cf4447344d3819c58c999b4060f6c5d4f9d2c3bbfb67d8f80f4fc7d2ddc7697a": { user: "Gojo", role: "member" }
       };
 
       // Pure JS SHA-256 Engine (Universal: Works on WebCrypto, HTTPS, HTTP, and local file://)
@@ -141,7 +154,7 @@
         var key = (plainTextKey || '').trim();
         var h = computeSha256(key);
         var snippet = '"' + h + '": { user: "' + (userName || 'Member') + '", role: "member" },';
-        console.log('%c[Flippy Key Generator]%c Entry for whitelist:\n' + snippet, 'color:#06b6d4;font-weight:bold;', 'color:#fff;');
+        console.log('%c[Flippy Key Generator]%c Entry for whitelist:\n' + snippet, 'color:#10d988;font-weight:bold;', 'color:#fff;');
         return h;
       };
 
@@ -284,11 +297,11 @@
         </div>
         <div class="header-meta">
           <div class="header-eyebrow">
-            <span>HOLO MOTION ENGINE</span>
-            <span class="badge-chip">v3.0</span>
+            <span>OBSIDIAN MOTION SUITE</span>
+            <span class="badge-chip">v3.5</span>
           </div>
           <h1>FLIPPY<span class="h1-thin">STUDIO</span></h1>
-          <p class="subtitle">Multi-Layer Wipe · 3D Flip / Cube / Box · Alight Motion XML</p>
+          <p class="subtitle">Multi-Layer Wipe · 3D Box · Alight Motion XML · Direct MP4 YT Converter</p>
         </div>
       </div>
 
@@ -307,7 +320,14 @@
             <polyline points="21 15 16 10 5 21"/>
           </svg>
           <span>Media Converter</span>
-          <span class="new-chip">NEW</span>
+        </button>
+        <button class="nav-tab" data-tab="ytconverter" id="navTabYtConverter" type="button">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/>
+            <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>
+          </svg>
+          <span>YT Converter</span>
+          <span class="new-chip">MP4</span>
         </button>
         <button class="nav-tab" data-tab="hollowbox" id="navTabHollowBox" type="button">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -329,6 +349,12 @@
       </div>
 
       <div class="header-right">
+        <button class="theme-cycle-btn" id="themeToggleBtn" type="button" title="Cycle Theme: Obsidian Jade / Molten Crimson / Botanical Light" aria-label="Switch Website Theme">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>
+          </svg>
+          <span id="themeNameBadge">Jade</span>
+        </button>
         <div class="timecode" id="hudTimecode" title="Playhead">0.00s</div>
         <div class="header-status">
           <span class="beacon"></span>
@@ -1445,6 +1471,284 @@
       </div>
     </section>
 
+    <!-- Workspace: YT Converter (1080p / 4K 60FPS Stream Muxer & Legal Compliance Gate) -->
+    <section class="panel ytconverter-panel" id="ytconverter-panel" style="display: none; grid-column: 1 / -1; --i:0;">
+      <div class="panel-header">
+        <h2>
+          <span class="ph-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/>
+              <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>
+            </svg>
+          </span>
+          <span class="ph-text">YT Converter<small>High-Bitrate 1080p / 4K 60fps Video Importer · Codec Selector · Copyright &amp; Channel Compliance Gate</small></span>
+        </h2>
+        <div class="xmlglsl-header-actions">
+          <span class="ph-btn" id="ytcStreamSpecBadge" style="font-family: var(--font-mono); font-size: 11px; pointer-events: none;">2160P60 · H264 / AAC · .MP4</span>
+        </div>
+      </div>
+
+      <div class="ytc-layout">
+        <!-- Column 1: Link Import, Stream Preview & Quick Test Presets -->
+        <div class="ytc-card">
+          <div class="xmlglsl-card-title">
+            <span>01 · YouTube Link Import &amp; Stream Verification</span>
+            <span class="tag">Source</span>
+          </div>
+
+          <div class="ytc-url-bar">
+            <input type="text" class="ytc-url-input" id="ytcUrlInput" placeholder="Paste YouTube URL (e.g. https://www.youtube.com/watch?v=...)">
+            <button class="ph-btn ph-btn-primary" id="ytcAnalyzeBtn" type="button" style="white-space: nowrap; padding: 0 14px;">Analyze Link</button>
+          </div>
+
+          <!-- Quick Test Presets to Verify Allowed vs Blocked Movie/Anime Channels -->
+          <div class="xg-prop-group">
+            <div class="xg-prop-group-title">
+              <span>Compliance Test Presets</span>
+              <span style="font-size: 10px; color: var(--text-3);">Instant Gate Check</span>
+            </div>
+            <div class="xg-quick-pills">
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Big Buck Bunny 60fps 4K - Blender Open Movie" data-author="Blender Foundation">✓ Open 4K60 Sample (Allowed)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw" data-title="Motion Design Showreel 2026 [4K 60FPS]" data-author="Indie VFX Creator">✓ Creator Edit (Allowed)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_anime1" data-title="Jujutsu Kaisen Season 2 - Episode 18 [Eng Sub]" data-author="Crunchyroll">✕ Crunchyroll Anime Ep (Blocked)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_anime2" data-title="One Piece Episode 1089 | Official English Sub" data-author="Toei Animation">✕ Toei Anime Episode (Blocked)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_movie1" data-title="Spider-Man: Across the Spider-Verse (2023) | Full Movie 4K" data-author="Sony Pictures Entertainment">✕ Studio Full Movie (Blocked)</button>
+            </div>
+          </div>
+
+          <!-- Stream Metadata Preview Card -->
+          <div class="ytc-video-preview empty" id="ytcVideoPreviewCard">
+            <div class="ytc-thumb-wrap">
+              <img id="ytcThumbImg" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='79' viewBox='0 0 140 79'%3E%3Crect width='140' height='79' fill='%230d0d0f'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%23555' font-family='monospace' font-size='10'%3ENO STREAM%3C/text%3E%3C/svg%3E" alt="Stream thumbnail">
+            </div>
+            <div class="ytc-video-meta">
+              <div class="ytc-video-title" id="ytcVideoTitle">No YouTube stream loaded</div>
+              <div class="ytc-channel-name" id="ytcChannelName">Channel: —</div>
+            </div>
+          </div>
+
+          <!-- Live Legal & Channel Compliance Gate Readout -->
+          <div class="ytc-compliance-box">
+            <span class="ytc-compliance-badge idle" id="ytcComplianceBadge">AWAITING LINK</span>
+            <div class="ytc-compliance-reason" id="ytcComplianceReason">Paste a YouTube link above to verify channel &amp; copyright eligibility.</div>
+            <div class="ytc-compliance-rule" id="ytcComplianceRule">POLICY: NO FULL MOVIES / NO LICENSED ANIME EPISODES</div>
+          </div>
+        </div>
+
+        <!-- Column 2: Device Presets (iPhone Photos / Mobile / 4K60), Codec & Direct MP4 Output -->
+        <div class="ytc-card">
+          <div class="xmlglsl-card-title">
+            <span>02 · Device Preset, Resolution &amp; Codec</span>
+            <span class="tag" id="ytcActivePresetTag">Direct .MP4</span>
+          </div>
+
+          <!-- Mobile / iPhone Photos & NLE Device Presets -->
+          <div class="xg-prop-group">
+            <div class="xg-prop-group-title">
+              <span>Target Device Preset</span>
+              <span style="font-size: 10px; color: var(--cyan);" id="ytcDetectedDeviceLabel">Auto-Optimized</span>
+            </div>
+            <div class="ytc-preset-grid" id="ytcPresetGroup">
+              <button type="button" class="ytc-preset-btn" data-preset="iphone_photos">
+                <span class="ytc-preset-title">📱 iPhone Photos</span>
+                <span class="ytc-preset-sub">1080p H.264+AAC · Camera Roll</span>
+              </button>
+              <button type="button" class="ytc-preset-btn" data-preset="android_gallery">
+                <span class="ytc-preset-title">🤖 Android MP4</span>
+                <span class="ytc-preset-sub">1080p60 MP4 · Gallery Direct</span>
+              </button>
+              <button type="button" class="ytc-preset-btn active" data-preset="desktop_4k">
+                <span class="ytc-preset-title">🖥️ Desktop 4K60</span>
+                <span class="ytc-preset-sub">2160p60 Ultra HD · .MP4</span>
+              </button>
+              <button type="button" class="ytc-preset-btn" data-preset="nle_edit">
+                <span class="ytc-preset-title">🎬 Alight Motion</span>
+                <span class="ytc-preset-sub">1080p60 AVC1 · Zero-Lag Edit</span>
+              </button>
+            </div>
+            <div class="ytc-ios-hint ok" id="ytcIosCompatHint">
+              ✓ Direct .MP4 video output enabled (H.264 + AAC · Apple Photos &amp; Mobile Ready)
+            </div>
+          </div>
+
+          <div class="xg-prop-group">
+            <div class="xg-prop-group-title">
+              <span>Stream Quality &amp; Encoding</span>
+            </div>
+
+            <div class="xg-prop-row">
+              <span class="xg-prop-label">Resolution / FPS</span>
+              <select id="ytcResolutionSelect" class="ph-btn" style="flex: 1; max-width: 240px; font-size: 11px; padding: 6px;">
+                <option value="2160p60" selected>2160p (4K Ultra HD) · 60 FPS</option>
+                <option value="2160p30">2160p (4K Ultra HD) · 30 FPS</option>
+                <option value="1440p60">1440p (2K QHD) · 60 FPS</option>
+                <option value="1080p60">1080p (Full HD) · 60 FPS</option>
+                <option value="1080p30">1080p (Full HD) · 30 FPS</option>
+                <option value="720p60">720p (HD) · 60 FPS</option>
+                <option value="480p">480p (Standard) · 30 FPS</option>
+                <option value="audio">Audio Only (.M4A / .MP3)</option>
+              </select>
+            </div>
+
+            <div class="xg-prop-row">
+              <span class="xg-prop-label">Video Codec</span>
+              <select id="ytcVideoCodecSelect" class="ph-btn" style="flex: 1; max-width: 240px; font-size: 11px; padding: 6px;">
+                <option value="h264" selected>H.264 / AVC1 (iPhone Photos &amp; Alight Motion)</option>
+                <option value="hevc">H.265 / HEVC (Apple hvc1 / 10-bit)</option>
+                <option value="av1">AV1 (Desktop 4K60 High Efficiency)</option>
+                <option value="vp9">VP9 (Desktop WebM HDR)</option>
+                <option value="prores">Apple ProRes 422 (.MOV Edit Master)</option>
+              </select>
+            </div>
+
+            <div class="xg-prop-row">
+              <span class="xg-prop-label">Audio Codec</span>
+              <select id="ytcAudioCodecSelect" class="ph-btn" style="flex: 1; max-width: 240px; font-size: 11px; padding: 6px;">
+                <option value="aac" selected>AAC-LC (256 kbps · iOS Photos &amp; MP4 Native)</option>
+                <option value="mp3">MP3 (320 kbps CBR)</option>
+                <option value="opus">Opus (160 kbps · WebM/MKV)</option>
+                <option value="flac">FLAC (24-bit Lossless)</option>
+                <option value="wav">PCM WAV (Uncompressed 48kHz)</option>
+              </select>
+            </div>
+
+            <div class="xg-prop-row">
+              <span class="xg-prop-label">Container</span>
+              <select id="ytcContainerSelect" class="ph-btn" style="flex: 1; max-width: 240px; font-size: 11px; padding: 6px;">
+                <option value="mp4" selected>.MP4 (Universal Video · iPhone &amp; Desktop)</option>
+                <option value="mov">.MOV (Apple QuickTime / iOS Photos)</option>
+                <option value="mkv">.MKV (Desktop Matroska)</option>
+                <option value="webm">.WEBM (Desktop VP9 / AV1)</option>
+                <option value="m4a">.M4A (Apple Audio Only)</option>
+                <option value="mp3">.MP3 (Audio Only)</option>
+                <option value="wav">.WAV (Lossless Audio)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Optional Sub-Clip Range -->
+          <div class="xg-prop-group">
+            <div class="xg-prop-row">
+              <span class="xg-prop-label">Trim Clip Section (Keyframe-Exact)</span>
+              <label class="xg-switch-mini">
+                <input type="checkbox" id="ytcTrimToggle">
+                <span class="xg-switch-slider"></span>
+              </label>
+            </div>
+            <div class="xg-prop-row" id="ytcTrimRow" style="display: none; margin-top: 6px;">
+              <span class="xg-prop-label">Start / End</span>
+              <div class="xg-dual-ctrl">
+                <input type="text" id="ytcTrimStart" value="00:00:00" style="width: 85px; font-family: var(--font-mono); font-size: 11px; padding: 4px; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); border-radius: 4px; text-align: center;">
+                <span style="color: var(--text-3);">→</span>
+                <input type="text" id="ytcTrimEnd" value="00:00:30" style="width: 85px; font-family: var(--font-mono); font-size: 11px; padding: 4px; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); border-radius: 4px; text-align: center;">
+              </div>
+            </div>
+          </div>
+
+          <!-- Rights Attestation & Real MP4 Download Action -->
+          <div class="xg-prop-group">
+            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11px; color: var(--text-2); cursor: pointer; line-height: 1.4;">
+              <input type="checkbox" id="ytcLegalAttestCheck" checked style="margin-top: 2px; accent-color: var(--accent);">
+              <span>I confirm this source is not a copyrighted feature film, theatrical motion picture, or licensed anime broadcast episode, and I hold rights or fair-use authorization for editing.</span>
+            </label>
+
+            <button class="ph-btn ph-btn-primary ytc-main-dl-btn" id="ytcDownloadBtn" type="button" disabled>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span id="ytcDownloadBtnLabel">Download .MP4 Video</span>
+            </button>
+
+            <div class="ytc-progress-wrap" id="ytcProgressWrap">
+              <div class="ytc-progress-bar">
+                <div class="ytc-progress-fill" id="ytcProgressBarFill"></div>
+              </div>
+              <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-2);" id="ytcProgressStatus">Initializing MP4 muxer...</div>
+            </div>
+
+            <!-- Ready MP4 Preview + One-Tap Save to iPhone Photos (Web Share API Level 2) -->
+            <div class="ytc-ready-media-box" id="ytcReadyMediaBox" style="display: none;">
+              <div class="ytc-ready-header">
+                <span class="ytc-ready-badge">MP4 READY</span>
+                <span class="ytc-ready-filename" id="ytcReadyFilename">video.mp4</span>
+              </div>
+              <video id="ytcPreviewPlayer" class="ytc-preview-player" controls playsinline preload="metadata"></video>
+              <div class="ytc-ready-actions">
+                <button type="button" class="ytc-save-photos-btn" id="ytcSaveToPhotosBtn">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+                  <span id="ytcSaveToPhotosLabel">Save Video to iPhone Photos</span>
+                </button>
+                <a class="ph-btn ytc-direct-file-btn" id="ytcDirectMp4Link" href="#" download="video.mp4">
+                  ⬇ Save .MP4 File
+                </a>
+              </div>
+              <div class="ytc-photos-guide" id="ytcPhotosStepGuide">
+                <strong>iPhone / iPad Tip:</strong> Tap <em>Save Video to iPhone Photos</em> → select <strong>Save Video</strong> in the iOS share sheet to save directly into your Camera Roll.
+              </div>
+            </div>
+
+            <!-- Static Host Direct MP4 Streamer Fallback (Used automatically when no server/worker proxy is present) -->
+            <div class="ytc-embed-fallback-wrap" id="ytcEmbedFallbackWrap" style="display: none;">
+              <div class="ytc-embed-fallback-header">
+                <span>Direct Browser .MP4 Converter (Popups Blocked)</span>
+                <span class="ytc-tag" id="ytcEmbedFormatTag">MP4 1080p</span>
+              </div>
+              <iframe
+                id="ytcEmbedFrame"
+                class="ytc-embed-frame"
+                title="Direct MP4 Video Downloader"
+                sandbox="allow-scripts allow-same-origin allow-downloads allow-top-navigation-by-user-activation"
+                referrerpolicy="origin"
+                src="about:blank"
+              ></iframe>
+              <div class="ytc-photos-guide">
+                <strong>Mobile / iPhone Users:</strong> Tap Download above to save the <code>.mp4</code>, then tap the file in Safari Downloads → <strong>Share</strong> → <strong>Save Video</strong> to add to Photos.
+              </div>
+            </div>
+          </div>
+
+          <!-- Collapsible Advanced CLI Reference (Never forces .bat download) -->
+          <details class="ytc-cli-details">
+            <summary>Advanced: Optional CLI Command Reference (yt-dlp)</summary>
+            <div class="xg-prop-group" style="margin-top: 8px;">
+              <div class="xg-prop-group-title">
+                <span>Local FFmpeg / yt-dlp String</span>
+                <button class="xg-btn-icon" id="ytcCopyCliBtn" type="button">Copy Command</button>
+              </div>
+              <div class="ytc-cli-box" id="ytcCliCode">yt-dlp -f "bestvideo[height<=2160][fps<=60][vcodec^=avc1]+bestaudio[acodec^=mp4a]" --merge-output-format mp4</div>
+            </div>
+          </details>
+        </div>
+
+        <!-- Column 3: Legal Guardrails, Restricted Movie/Anime Channels & Queue -->
+        <div class="ytc-card">
+          <div class="xmlglsl-card-title">
+            <span>03 · Legal Guardrails &amp; Channel Blocklist</span>
+            <span class="tag">DMCA Guard</span>
+          </div>
+
+          <div class="xg-prop-group">
+            <div class="xg-prop-group-title">
+              <span>Restricted Movie &amp; Anime Distributors</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-2); line-height: 1.4;">
+              Downloads are automatically blocked when the source channel belongs to a licensed anime publisher or film studio, or when the title matches full-length movie / episodic broadcast patterns.
+            </div>
+            <div class="ytc-blocked-tags" id="ytcBlockedChannelsTags"></div>
+            <div style="display: flex; gap: 6px; margin-top: 4px;">
+              <input type="text" id="ytcCustomBlockedInput" placeholder="Add restricted channel name..." style="flex: 1; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); font-size: 11px; padding: 5px 8px; border-radius: var(--r-xs);">
+              <button class="ph-btn" id="ytcAddBlockedChannelBtn" type="button" style="font-size: 11px; padding: 4px 10px;">+ Block</button>
+            </div>
+          </div>
+
+          <div class="xg-prop-group" style="flex: 1;">
+            <div class="xg-prop-group-title">
+              <span>Session Conversion Queue</span>
+            </div>
+            <div class="ytc-history-list" id="ytcHistoryList"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
     <!-- =========================================================================
          HOLLOW BOX MAKER — 3D Hollow Box Inside Hollow Box Animation Engine
          ========================================================================= -->
@@ -1704,7 +2008,11 @@
           </svg>
           <span class="dl-text" id="mobileHeaderDlText">Download XML</span>
         </button>
-        <div class="mobile-badge">v3.0</div>
+        <button class="mobile-theme-btn" id="mobileThemeToggleBtn" type="button" title="Switch Theme" aria-label="Switch Theme">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M2 12h2"/><path d="M20 12h2"/>
+          </svg>
+        </button>
       </div>
     </div>
 
@@ -1722,6 +2030,10 @@
 
     <div class="mobile-tab-content" id="mobileTabConverter">
       <div class="mobile-tab-inner" id="mobileConverterSlot"></div>
+    </div>
+
+    <div class="mobile-tab-content" id="mobileTabYtConverter">
+      <div class="mobile-tab-inner" id="mobileYtConverterSlot"></div>
     </div>
 
     <div class="mobile-tab-content" id="mobileTabHollowBox">
@@ -1752,12 +2064,19 @@
         <span>Stack &amp; XML</span>
       </button>
       <button class="mobile-tab" data-tab="mobileTabConverter">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
           <circle cx="8.5" cy="8.5" r="1.5"/>
           <polyline points="21 15 16 10 5 21"/>
         </svg>
-        <span>Converter</span>
+        <span>Media</span>
+      </button>
+      <button class="mobile-tab" data-tab="mobileTabYtConverter">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M22.54 6.42a2.78 2.78 0 0 0-1.94-2C18.88 4 12 4 12 4s-6.88 0-8.6.46a2.78 2.78 0 0 0-1.94 2A29 29 0 0 0 1 11.75a29 29 0 0 0 .46 5.33A2.78 2.78 0 0 0 3.4 19c1.72.46 8.6.46 8.6.46s6.88 0 8.6-.46a2.78 2.78 0 0 0 1.94-2 29 29 0 0 0 .46-5.25 29 29 0 0 0-.46-5.33z"/>
+          <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>
+        </svg>
+        <span>YT MP4</span>
       </button>
       <button class="mobile-tab" data-tab="mobileTabHollowBox">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -1770,7 +2089,8 @@
     </nav>
   </div>
 
-  <script src="app.js?v=3.3"></script>
-  <script src="fx.js?v=3.0"></script>
+  <script src="ytconverter.js?v=4.0"></script>
+  <script src="app.js?v=4.0"></script>
+  <script src="fx.js?v=4.0"></script>
 </body>
 </html>
