@@ -167,8 +167,6 @@ const YT_CORS_HEADERS = {
   "Access-Control-Expose-Headers": "Content-Length, Content-Disposition, Content-Type"
 };
 
-const YT_DIRECT_API_TOKEN = "dfcb6d76f2f6a9894gjkege8a4ab232222";
-
 function ytJsonResponse(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
@@ -178,48 +176,6 @@ function ytJsonResponse(status, obj) {
       "Cache-Control": "no-store"
     }
   });
-}
-
-function sanitizeDownloadFilename(rawName, fallbackExt = "mp4") {
-  const cleaned = String(rawName || "")
-    .replace(/["\r\n<>:\\|?*\x00-\x1F]/g, "_")
-    .replace(/\s+/g, "_")
-    .slice(0, 110);
-  if (!cleaned) return `flippy_video.${fallbackExt}`;
-  if (!/\.[a-z0-9]{2,4}$/i.test(cleaned)) return `${cleaned}.${fallbackExt}`;
-  return cleaned;
-}
-
-function inferMediaMime(formatOrName) {
-  const s = String(formatOrName || "").toLowerCase();
-  if (s.endsWith(".mp3") || s === "mp3") return "audio/mpeg";
-  if (s.endsWith(".m4a") || s === "m4a" || s === "aac") return "audio/mp4";
-  if (s.endsWith(".wav") || s === "wav") return "audio/wav";
-  if (s.endsWith(".flac") || s === "flac") return "audio/flac";
-  if (s.endsWith(".opus") || s === "opus") return "audio/ogg";
-  if (s.endsWith(".webm") || s === "webm") return "video/webm";
-  return "video/mp4";
-}
-
-function isAllowedMediaStorageHost(hostname) {
-  const h = String(hostname || "").toLowerCase();
-  return (
-    h === "savenow.to" || h.endsWith(".savenow.to") ||
-    h === "lbserver.xyz" || h.endsWith(".lbserver.xyz") ||
-    h === "loader.to" || h.endsWith(".loader.to") ||
-    h === "googlevideo.com" || h.endsWith(".googlevideo.com") ||
-    h === "4kdownload.to" || h.endsWith(".4kdownload.to") ||
-    h === "y2down.cc" || h.endsWith(".y2down.cc")
-  );
-}
-
-function isBlockedAdUrl(urlObj) {
-  if (!urlObj || (urlObj.protocol !== "https:" && urlObj.protocol !== "http:")) return true;
-  const h = urlObj.hostname.toLowerCase();
-  const p = urlObj.pathname.toLowerCase();
-  if (!isAllowedMediaStorageHost(h)) return true;
-  if (p.includes("/ajax/ad") || p.includes("/ad/") || h.includes("hai8g")) return true;
-  return false;
 }
 
 async function verifyYoutubeCompliance(ytUrl) {
@@ -256,100 +212,377 @@ async function verifyYoutubeCompliance(ytUrl) {
   }
 }
 
-// Uses first-party /ajax/download.php + /ajax/progress.php (returns direct storage node URLs with 0 ad redirects)
-async function fetchUpstreamYtJson(pathname, queryObj) {
-  const hosts = ["https://p.savenow.to", "https://p.lbserver.xyz"];
-  const qs = new URLSearchParams(queryObj).toString();
-  let lastErr = null;
+const YT_UA_MOBILE = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36";
+const YT_UA_DESKTOP = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36";
+const SAVETUBE_KEY_HEX = "C5D58EF67A7584E4A29F6C35BBC4EB12";
+const PINNED_COBALT_INSTANCES = ["https://rue-cobalt.xenon.zone"];
 
-  for (const host of hosts) {
-    try {
-      const r = await fetch(`${host}${pathname}?${qs}`, {
-        method: "GET",
-        headers: {
-          "Origin": "https://en.loader.to",
-          "Referer": "https://en.loader.to/",
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-          "Accept": "application/json"
-        }
-      });
-      if (r.ok) {
-        return await r.json();
-      }
-      lastErr = new Error(`Upstream HTTP ${r.status}`);
-    } catch (e) {
-      lastErr = e;
-    }
+let cachedCobaltInstances = null;
+let cachedCobaltAt = 0;
+
+function extractYoutubeVideoId(input) {
+  if (!input) return null;
+  const trimmed = String(input).trim();
+  const m = trimmed.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+  if (m && m[1]) return m[1];
+  if (/^[a-zA-Z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  return null;
+}
+
+function canonicalYoutubeWatchUrl(input) {
+  const id = extractYoutubeVideoId(input);
+  return id ? `https://www.youtube.com/watch?v=${id}` : String(input || "").trim();
+}
+
+function isAudioFormat(format) {
+  return format === "mp3" || format === "m4a" || format === "aac" || format === "wav" || format === "flac" || format === "opus";
+}
+
+function getFormatExtension(format) {
+  if (format === "mp3" || format === "m4a" || format === "wav" || format === "flac") return format;
+  if (format === "aac") return "m4a";
+  if (format === "opus") return "mp3";
+  return "mp4";
+}
+
+function getFormatMimeType(format) {
+  const ext = getFormatExtension(format);
+  if (ext === "mp3") return "audio/mpeg";
+  if (ext === "m4a") return "audio/mp4";
+  if (ext === "wav") return "audio/wav";
+  if (ext === "flac") return "audio/flac";
+  return "video/mp4";
+}
+
+function sanitizeDownloadFilename(rawName, fallbackExt = "mp4") {
+  const cleaned = String(rawName || "")
+    .replace(/["\r\n<>:\\|?*\x00-\x1F]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 110);
+  if (!cleaned) return `flippy_video.${fallbackExt}`;
+  if (!/\.[a-z0-9]{2,4}$/i.test(cleaned)) return `${cleaned}.${fallbackExt}`;
+  return cleaned;
+}
+
+function hexToBytes(hex) {
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.substr(i * 2, 2), 16);
   }
-  throw lastErr || new Error("Upstream MP4 muxer unavailable");
+  return out;
 }
 
-async function startCleanUpstreamJob(ytUrl, format) {
-  return await fetchUpstreamYtJson("/ajax/download.php", {
-    copyright: "0",
-    format,
-    url: ytUrl,
-    api: YT_DIRECT_API_TOKEN
-  });
+function base64ToBytes(b64) {
+  const bin = atob(String(b64).replace(/\s+/g, ""));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
-async function pollCleanUpstreamJob(id) {
-  return await fetchUpstreamYtJson("/ajax/progress.php", { id });
+function toBase64Url(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-// Opens upstream media stream with manual redirect inspection + magic-byte verification (never follows ad redirects)
-async function openCleanMediaStream(rawSrcUrl) {
-  let current;
+function fromBase64Url(b64u) {
+  let b64 = String(b64u).replace(/-/g, "+").replace(/_/g, "/");
+  while (b64.length % 4) b64 += "=";
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+
+async function mintStreamToken(payloadObj, secret) {
+  const encoded = toBase64Url(JSON.stringify(payloadObj));
+  const sig = await signData(encoded, secret);
+  return `${encoded}.${sig}`;
+}
+
+async function verifyStreamToken(tokenStr, secret) {
+  if (!tokenStr || typeof tokenStr !== "string") return null;
+  const dot = tokenStr.indexOf(".");
+  if (dot <= 0) return null;
+  const encoded = tokenStr.slice(0, dot);
+  const sig = tokenStr.slice(dot + 1);
+  const valid = await verifySignature(encoded, sig, secret);
+  if (!valid) return null;
   try {
-    current = new URL(String(rawSrcUrl || "").trim());
+    const parsed = JSON.parse(fromBase64Url(encoded));
+    if (!parsed || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
+    return parsed;
   } catch (_) {
     return null;
   }
-  if (current.protocol === "http:") current.protocol = "https:";
-  if (isBlockedAdUrl(current)) return null;
+}
 
-  let streamRes = null;
-  for (let hop = 0; hop < 4; hop++) {
-    const res = await fetch(current.href, {
+async function fetchWithTimeout(url, options = {}, timeoutMs = 12000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: ctrl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function decryptSaveTubePayload(encB64) {
+  const raw = base64ToBytes(encB64);
+  if (raw.byteLength <= 16) throw new Error("Invalid media cipher payload");
+  const iv = raw.subarray(0, 16);
+  const ciphertext = raw.subarray(16);
+  const cryptoKey = await crypto.subtle.importKey(
+    "raw",
+    hexToBytes(SAVETUBE_KEY_HEX),
+    { name: "AES-CBC" },
+    false,
+    ["decrypt"]
+  );
+  const decrypted = await crypto.subtle.decrypt({ name: "AES-CBC", iv }, cryptoKey, ciphertext);
+  return JSON.parse(new TextDecoder().decode(decrypted));
+}
+
+async function resolveViaSaveTube(ytUrl, format) {
+  const watchUrl = canonicalYoutubeWatchUrl(ytUrl);
+  const wantAudio = isAudioFormat(format);
+  const stQuality = wantAudio
+    ? "128"
+    : (format === "720" || format === "480" || format === "360" ? format : "1080");
+
+  let lastErr = null;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const cdnRes = await fetchWithTimeout("https://media.savetube.vip/api/random-cdn", {
+        headers: {
+          "User-Agent": YT_UA_MOBILE,
+          "Referer": "https://save-tube.com/",
+          "Origin": "https://save-tube.com",
+          "Accept": "application/json"
+        }
+      }, 6000);
+      if (!cdnRes.ok) throw new Error(`SaveTube CDN HTTP ${cdnRes.status}`);
+      const cdnJson = await cdnRes.json();
+      const cdn = cdnJson && cdnJson.cdn ? String(cdnJson.cdn).trim() : "";
+      if (!cdn) throw new Error("SaveTube returned empty CDN");
+
+      const infoRes = await fetchWithTimeout(`https://${cdn}/v2/info`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": YT_UA_MOBILE,
+          "Referer": "https://save-tube.com/",
+          "Origin": "https://save-tube.com"
+        },
+        body: JSON.stringify({ url: watchUrl })
+      }, 10000);
+      if (!infoRes.ok) throw new Error(`SaveTube info HTTP ${infoRes.status}`);
+      const infoJson = await infoRes.json();
+      if (!infoJson || !infoJson.status || !infoJson.data) {
+        throw new Error((infoJson && infoJson.message) || "SaveTube info unavailable");
+      }
+
+      const decoded = await decryptSaveTubePayload(infoJson.data);
+      if (!decoded || !decoded.key) throw new Error("SaveTube key missing");
+
+      const dlRes = await fetchWithTimeout(`https://${cdn}/download`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          "User-Agent": YT_UA_MOBILE,
+          "Referer": "https://save-tube.com/",
+          "Origin": "https://save-tube.com"
+        },
+        body: JSON.stringify({
+          downloadType: wantAudio ? "audio" : "video",
+          quality: stQuality,
+          key: decoded.key
+        })
+      }, 14000);
+      if (!dlRes.ok) throw new Error(`SaveTube download HTTP ${dlRes.status}`);
+      const dlJson = await dlRes.json();
+      const dlUrl = dlJson && dlJson.data && dlJson.data.downloadUrl ? String(dlJson.data.downloadUrl).trim() : "";
+      if (!dlUrl) throw new Error("SaveTube returned empty downloadUrl");
+
+      return {
+        provider: "savetube",
+        streamUrl: dlUrl,
+        referer: "https://save-tube.com/",
+        title: decoded.title || ""
+      };
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("SaveTube provider unavailable");
+}
+
+async function getCobaltInstances() {
+  const now = Date.now();
+  if (cachedCobaltInstances && now - cachedCobaltAt < 10 * 60 * 1000) {
+    return cachedCobaltInstances;
+  }
+  const found = [...PINNED_COBALT_INSTANCES];
+  try {
+    const r = await fetchWithTimeout("https://cobalt.directory/", {
+      headers: { "User-Agent": YT_UA_DESKTOP, "Accept": "text/html" }
+    }, 4500);
+    if (r.ok) {
+      const html = await r.text();
+      const entryRegex = /\{score:[\d.]+,protocol:"https",tests:\{[\s\S]*?\},turnstile:(true|false),[\s\S]*?online:(true|false),[\s\S]*?api:"([^"]+)"/g;
+      let m;
+      while ((m = entryRegex.exec(html)) !== null) {
+        const block = m[0];
+        const turnstile = m[1] === "true";
+        const online = m[2] === "true";
+        const apiHost = m[3];
+        if (!turnstile && online && apiHost && /youtube:\{[^}]*status:true/.test(block)) {
+          const instUrl = `https://${apiHost}`;
+          if (!found.includes(instUrl)) found.push(instUrl);
+        }
+      }
+    }
+  } catch (_) {}
+  cachedCobaltInstances = found;
+  cachedCobaltAt = now;
+  return found;
+}
+
+async function resolveViaCobalt(ytUrl, format) {
+  const watchUrl = canonicalYoutubeWatchUrl(ytUrl);
+  const wantAudio = isAudioFormat(format);
+  const instances = await getCobaltInstances();
+  const qualityMap = { "4k": "2160", "1440": "1440", "1080": "1080", "720": "720", "480": "480", "360": "360" };
+  const videoQuality = qualityMap[format] || "1080";
+
+  const reqBody = wantAudio
+    ? {
+        url: watchUrl,
+        downloadMode: "audio",
+        audioFormat: (format === "wav" ? "wav" : "mp3")
+      }
+    : {
+        url: watchUrl,
+        videoQuality,
+        youtubeVideoCodec: "h264"
+      };
+
+  let lastErr = null;
+  for (const base of instances.slice(0, 3)) {
+    try {
+      const r = await fetchWithTimeout(base + "/", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Content-Type": "application/json",
+          "User-Agent": YT_UA_DESKTOP
+        },
+        body: JSON.stringify(reqBody)
+      }, 10000);
+      if (!r.ok) throw new Error(`Cobalt HTTP ${r.status}`);
+      const j = await r.json();
+      if ((j.status === "tunnel" || j.status === "redirect") && j.url) {
+        return {
+          provider: "cobalt",
+          streamUrl: String(j.url),
+          referer: "",
+          title: j.filename || ""
+        };
+      }
+      throw new Error((j.error && j.error.code) || "Cobalt returned no stream");
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("Cobalt instances unavailable");
+}
+
+function getProviderChain(ytUrl, format) {
+  if (format === "wav") {
+    return [
+      () => resolveViaCobalt(ytUrl, format),
+      () => resolveViaSaveTube(ytUrl, format)
+    ];
+  }
+  return [
+    () => resolveViaSaveTube(ytUrl, format),
+    () => resolveViaCobalt(ytUrl, format)
+  ];
+}
+
+async function resolveCloudMedia(ytUrl, format) {
+  let lastErr = null;
+  for (const resolver of getProviderChain(ytUrl, format)) {
+    try {
+      return await resolver();
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr || new Error("Cloud MP4 providers temporarily unavailable");
+}
+
+function isSafeUpstreamMediaUrl(urlObj) {
+  if (!urlObj || urlObj.protocol !== "https:") return false;
+  const h = urlObj.hostname.toLowerCase();
+  const p = urlObj.pathname.toLowerCase();
+  if (h === "localhost" || h.endsWith(".local") || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h)) {
+    return false;
+  }
+  if (p.includes("/ajax/ad") || p.includes("/ad/") || h.includes("hai8g") || h.includes("savenow.to")) {
+    return false;
+  }
+  return true;
+}
+
+async function openVerifiedBinaryStream(rawStreamUrl, referer = "", rangeHeader = "") {
+  let current;
+  try { current = new URL(String(rawStreamUrl || "").trim()); } catch (_) { return null; }
+  if (current.protocol === "http:") current.protocol = "https:";
+  if (!isSafeUpstreamMediaUrl(current)) return null;
+
+  let res = null;
+  for (let hop = 0; hop < 3; hop++) {
+    const headers = { "User-Agent": YT_UA_MOBILE };
+    if (referer) headers["Referer"] = referer;
+    if (rangeHeader) headers["Range"] = rangeHeader;
+
+    const r = await fetchWithTimeout(current.href, {
       method: "GET",
       redirect: "manual",
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
-        "Referer": "https://en.loader.to/",
-        "Accept": "*/*"
-      }
-    });
+      headers
+    }, 15000);
 
-    if (res.status >= 300 && res.status < 400) {
-      const loc = res.headers.get("location");
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get("location");
+      try { if (r.body) await r.body.cancel(); } catch (_) {}
       if (!loc) return null;
-      let nextUrl;
-      try {
-        nextUrl = new URL(loc, current.href);
-      } catch (_) {
-        return null;
-      }
-      if (nextUrl.protocol === "http:") nextUrl.protocol = "https:";
-      if (isBlockedAdUrl(nextUrl)) {
-        return null;
-      }
-      current = nextUrl;
+      let next;
+      try { next = new URL(loc, current.href); } catch (_) { return null; }
+      if (next.protocol === "http:") next.protocol = "https:";
+      if (!isSafeUpstreamMediaUrl(next)) return null;
+      current = next;
       continue;
     }
-
-    streamRes = res;
+    res = r;
     break;
   }
 
-  if (!streamRes || !streamRes.ok || !streamRes.body) return null;
-
-  const contentType = (streamRes.headers.get("content-type") || "").toLowerCase();
-  if (contentType.includes("text/html") || contentType.includes("application/json") || contentType.includes("text/plain")) {
-    try { await streamRes.body.cancel(); } catch (_) {}
+  if (!res || (!res.ok && res.status !== 206) || !res.body) {
+    try { if (res && res.body) await res.body.cancel(); } catch (_) {}
     return null;
   }
 
-  const reader = streamRes.body.getReader();
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("text/html") || ct.includes("application/json") || ct.includes("text/plain")) {
+    try { await res.body.cancel(); } catch (_) {}
+    return null;
+  }
+
+  const reader = res.body.getReader();
   let firstChunk = null;
   while (true) {
     const step = await reader.read();
@@ -359,41 +592,32 @@ async function openCleanMediaStream(rawSrcUrl) {
       break;
     }
   }
-
-  if (!firstChunk || firstChunk.byteLength === 0) {
+  if (!firstChunk || firstChunk.byteLength < 16) {
     try { await reader.cancel(); } catch (_) {}
     return null;
   }
 
-  // Inspect initial bytes to guarantee binary media (reject HTML ad pages or JSON error payloads)
-  const headText = new TextDecoder("utf-8", { fatal: false })
-    .decode(firstChunk.subarray(0, Math.min(96, firstChunk.byteLength)))
-    .trimStart()
-    .toLowerCase();
-
+  const headStr = new TextDecoder().decode(firstChunk.subarray(0, Math.min(96, firstChunk.byteLength))).trimStart().toLowerCase();
   if (
-    headText.startsWith("<!doctype") ||
-    headText.startsWith("<html") ||
-    headText.startsWith("<script") ||
-    headText.startsWith("{\"error") ||
-    headText.startsWith("{\"success\":false")
+    headStr.startsWith("<!doctype") ||
+    headStr.startsWith("<html") ||
+    headStr.startsWith("<script") ||
+    headStr.startsWith("{") ||
+    headStr.startsWith("[")
   ) {
     try { await reader.cancel(); } catch (_) {}
     return null;
   }
 
-  const verifiedStream = new ReadableStream({
+  const stream = new ReadableStream({
     start(controller) {
       controller.enqueue(firstChunk);
     },
     async pull(controller) {
       try {
         const { done, value } = await reader.read();
-        if (done) {
-          controller.close();
-        } else {
-          controller.enqueue(value);
-        }
+        if (done) controller.close();
+        else if (value) controller.enqueue(value);
       } catch (err) {
         controller.error(err);
       }
@@ -404,10 +628,46 @@ async function openCleanMediaStream(rawSrcUrl) {
   });
 
   return {
-    stream: verifiedStream,
-    contentType: contentType || "video/mp4",
-    contentLength: streamRes.headers.get("content-length") || ""
+    stream,
+    status: res.status,
+    contentType: ct && ct !== "application/octet-stream" ? ct : null,
+    contentLength: res.headers.get("content-length") || "",
+    contentRange: res.headers.get("content-range") || "",
+    acceptRanges: res.headers.get("accept-ranges") || ""
   };
+}
+
+function getYtBackend(env) {
+  const raw = (env && env.YT_BACKEND_URL ? String(env.YT_BACKEND_URL) : "").trim().replace(/\/+$/, "");
+  if (!raw) return "";
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== "https:" && u.protocol !== "http:") return "";
+    return u.origin + u.pathname.replace(/\/+$/, "");
+  } catch (_) {
+    return "";
+  }
+}
+
+async function forwardToYtBackend(backend, pathWithQuery, request) {
+  const headers = new Headers();
+  const range = request.headers.get("range");
+  if (range) headers.set("Range", range);
+  headers.set("Accept", request.headers.get("accept") || "*/*");
+  const upstream = await fetch(backend + pathWithQuery, { method: "GET", headers, redirect: "manual" });
+
+  if (upstream.status >= 300 && upstream.status < 400) {
+    try { if (upstream.body) await upstream.body.cancel(); } catch (_) {}
+    return ytJsonResponse(502, { success: false, error: "Download backend returned a redirect; refused." });
+  }
+
+  const out = new Headers(YT_CORS_HEADERS);
+  for (const h of ["content-type", "content-length", "content-disposition", "content-range", "accept-ranges"]) {
+    const v = upstream.headers.get(h);
+    if (v) out.set(h, v);
+  }
+  out.set("Cache-Control", "no-store");
+  return new Response(upstream.body, { status: upstream.status, headers: out });
 }
 
 export default {
@@ -574,7 +834,12 @@ export default {
     // If authenticated: handle Direct MP4 YT Converter routes or stream actual site assets
     if (isAuthenticated) {
       if (url.pathname === "/__flippy_yt_ping") {
-        return ytJsonResponse(200, { ok: true, engine: "flippy-v3-edge-mp4", streamProxy: true });
+        return ytJsonResponse(200, {
+          ok: true,
+          engine: "flippy-v3-edge",
+          streamProxy: true,
+          canDownload: true
+        });
       }
 
       if (url.pathname === "/__flippy_yt_dl") {
@@ -582,7 +847,7 @@ export default {
         const rawFmt = (url.searchParams.get("format") || "1080").trim().toLowerCase();
         const format = YT_ALLOWED_FORMATS.has(rawFmt) ? rawFmt : "1080";
 
-        if (!ytUrl || !/(?:youtube\.com|youtu\.be)/i.test(ytUrl)) {
+        if (!ytUrl || !/(?:youtube\.com|youtu\.be)/i.test(ytUrl) || !extractYoutubeVideoId(ytUrl)) {
           return ytJsonResponse(400, { success: false, error: "Invalid YouTube URL" });
         }
 
@@ -591,117 +856,130 @@ export default {
           return ytJsonResponse(403, { success: false, error: compliance.reason });
         }
 
+        const backend = getYtBackend(env);
+        if (backend) {
+          try {
+            return await forwardToYtBackend(backend, url.pathname + url.search, request);
+          } catch (_) {}
+        }
+
         try {
-          const data = await startCleanUpstreamJob(ytUrl, format);
-          const cleanPayload = {
-            success: Boolean(data && data.success),
-            id: data && data.id ? String(data.id) : "",
-            title: (data && data.title) || "",
-            info: (data && data.info) || null,
-            format
-          };
-          if (data && data.download_url) {
-            cleanPayload.download_url = "/__flippy_yt_stream?src=" + encodeURIComponent(String(data.download_url));
-          }
-          return ytJsonResponse(200, cleanPayload);
+          const resolved = await resolveCloudMedia(ytUrl, format);
+          const streamToken = await mintStreamToken({
+            src: resolved.streamUrl,
+            ref: resolved.referer || "",
+            url: canonicalYoutubeWatchUrl(ytUrl),
+            fmt: format,
+            exp: Date.now() + 20 * 60 * 1000
+          }, secret);
+
+          return ytJsonResponse(200, {
+            success: 1,
+            id: "yt_" + Date.now().toString(36),
+            progress: 1000,
+            text: "Finished",
+            provider: resolved.provider,
+            title: resolved.title || "",
+            download_url: "/__flippy_yt_stream?token=" + encodeURIComponent(streamToken)
+          });
         } catch (err) {
-          return ytJsonResponse(502, { success: false, error: err.message || "Upstream muxer failed" });
+          return ytJsonResponse(502, {
+            success: false,
+            error: "Cloud MP4 muxer error: " + (err && err.message ? err.message : "upstream unavailable")
+          });
         }
       }
 
       if (url.pathname === "/__flippy_yt_progress") {
-        const id = (url.searchParams.get("id") || "").trim();
-        if (!id) {
-          return ytJsonResponse(400, { success: false, error: "Missing conversion job id" });
+        const backend = getYtBackend(env);
+        if (backend && url.searchParams.get("id")) {
+          try {
+            return await forwardToYtBackend(backend, url.pathname + url.search, request);
+          } catch (_) {}
         }
-        try {
-          const data = await pollCleanUpstreamJob(id);
-          const cleanProgress = {
-            success: data && data.success !== undefined ? Number(data.success) : 0,
-            progress: data && typeof data.progress === "number" ? data.progress : 0,
-            text: (data && data.text) || "Processing",
-            download_url: null
-          };
-          if (data && data.download_url && Number(data.success) === 1) {
-            cleanProgress.download_url = "/__flippy_yt_stream?src=" + encodeURIComponent(String(data.download_url));
-          }
-          return ytJsonResponse(200, cleanProgress);
-        } catch (err) {
-          return ytJsonResponse(502, { success: false, error: err.message || "Progress poll failed" });
-        }
+        return ytJsonResponse(200, {
+          success: 1,
+          progress: 1000,
+          text: "Finished"
+        });
       }
 
-      // Safe Binary Stream Endpoint (Zero Client Ad-Redirects, Magic-Byte Verified, Single-Use Token Recovery)
       if (url.pathname === "/__flippy_yt_stream") {
-        const src = (url.searchParams.get("src") || "").trim();
-        const ytUrl = (url.searchParams.get("url") || "").trim();
+        const backend = getYtBackend(env);
+        if (backend && url.searchParams.get("id") && !url.searchParams.get("token")) {
+          try {
+            return await forwardToYtBackend(backend, url.pathname + url.search, request);
+          } catch (_) {}
+        }
+
+        const rawToken = (url.searchParams.get("token") || "").trim();
+        const rawUrl = (url.searchParams.get("url") || "").trim();
         const rawFmt = (url.searchParams.get("format") || "1080").trim().toLowerCase();
-        const format = YT_ALLOWED_FORMATS.has(rawFmt) ? rawFmt : "1080";
-        const ext = (format === "mp3" || format === "m4a" || format === "wav" || format === "flac") ? format : "mp4";
-        const filename = sanitizeDownloadFilename(url.searchParams.get("filename"), ext);
+        const rangeHeader = request.headers.get("range") || "";
+
+        const tokenData = rawToken ? await verifyStreamToken(rawToken, secret) : null;
+        const effectiveFmt = YT_ALLOWED_FORMATS.has(tokenData && tokenData.fmt ? tokenData.fmt : rawFmt)
+          ? (tokenData && tokenData.fmt ? tokenData.fmt : rawFmt)
+          : "1080";
+        const effectiveUrl = (tokenData && tokenData.url) ? tokenData.url : rawUrl;
+        const fallbackExt = getFormatExtension(effectiveFmt);
+        const safeFilename = sanitizeDownloadFilename(url.searchParams.get("filename"), fallbackExt);
 
         let opened = null;
-        if (src) {
+
+        if (tokenData && tokenData.src) {
           try {
-            opened = await openCleanMediaStream(src);
+            opened = await openVerifiedBinaryStream(tokenData.src, tokenData.ref || "", rangeHeader);
           } catch (_) {
             opened = null;
           }
         }
 
-        // If src token was missing or single-use spent, transparently mint a fresh stream on the edge
-        if (!opened && ytUrl && /(?:youtube\.com|youtu\.be)/i.test(ytUrl)) {
-          const compliance = await verifyYoutubeCompliance(ytUrl);
-          if (!compliance.allowed) {
-            return ytJsonResponse(403, { success: false, error: compliance.reason });
+        if (!opened && effectiveUrl && /(?:youtube\.com|youtu\.be)/i.test(effectiveUrl) && extractYoutubeVideoId(effectiveUrl)) {
+          if (!tokenData) {
+            const compliance = await verifyYoutubeCompliance(effectiveUrl);
+            if (!compliance.allowed) {
+              return ytJsonResponse(403, { success: false, error: compliance.reason });
+            }
           }
-          try {
-            const initData = await startCleanUpstreamJob(ytUrl, format);
-            let freshSrc = (initData && initData.download_url) ? String(initData.download_url) : "";
-            const jobId = initData && initData.id ? String(initData.id) : "";
-
-            if (!freshSrc && jobId) {
-              for (let p = 0; p < 24; p++) {
-                await new Promise((r) => setTimeout(r, 1100));
-                const pData = await pollCleanUpstreamJob(jobId);
-                if (pData && pData.download_url && Number(pData.success) === 1) {
-                  freshSrc = String(pData.download_url);
-                  break;
-                }
-                if (pData && pData.progress >= 1000 && !pData.download_url) {
-                  break;
-                }
+          for (const resolver of getProviderChain(effectiveUrl, effectiveFmt)) {
+            try {
+              const fresh = await resolver();
+              if (fresh && fresh.streamUrl) {
+                opened = await openVerifiedBinaryStream(fresh.streamUrl, fresh.referer || "", rangeHeader);
+                if (opened) break;
               }
-            }
-
-            if (freshSrc) {
-              opened = await openCleanMediaStream(freshSrc);
-            }
-          } catch (_) {
-            opened = null;
+            } catch (_) {}
           }
         }
 
         if (!opened) {
           return ytJsonResponse(502, {
             success: false,
-            error: "Clean binary video stream unavailable or expired. Please click Download .MP4 Video again."
+            error: "Clean binary video stream unavailable. Please retry or select 1080p MP4."
           });
         }
 
-        const headers = new Headers(YT_CORS_HEADERS);
-        headers.set("Content-Type", inferMediaMime(filename) || opened.contentType || "video/mp4");
-        headers.set("Content-Disposition", `attachment; filename="${filename}"`);
-        headers.set("Cache-Control", "no-store");
-        if (opened.contentLength) {
-          headers.set("Content-Length", opened.contentLength);
-        }
-        return new Response(opened.stream, { status: 200, headers });
+        const outHeaders = new Headers(YT_CORS_HEADERS);
+        outHeaders.set("Content-Type", isAudioFormat(effectiveFmt) ? getFormatMimeType(effectiveFmt) : (opened.contentType || "video/mp4"));
+        outHeaders.set("Content-Disposition", `attachment; filename="${safeFilename}"`);
+        outHeaders.set("Cache-Control", "no-store");
+        if (opened.contentLength) outHeaders.set("Content-Length", opened.contentLength);
+        if (opened.contentRange) outHeaders.set("Content-Range", opened.contentRange);
+        if (opened.acceptRanges) outHeaders.set("Accept-Ranges", opened.acceptRanges);
+
+        return new Response(opened.stream, { status: opened.status, headers: outHeaders });
       }
 
       if (env && env.ASSETS) {
         const assetRes = await env.ASSETS.fetch(request);
-        if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/ytconverter.js") {
+        if (
+          url.pathname === "/" ||
+          url.pathname === "/index.html" ||
+          url.pathname === "/ytconverter.js" ||
+          url.pathname === "/app.js" ||
+          url.pathname === "/styles.css"
+        ) {
           const freshHeaders = new Headers(assetRes.headers);
           freshHeaders.set("Cache-Control", "no-cache, must-revalidate");
           return new Response(assetRes.body, {

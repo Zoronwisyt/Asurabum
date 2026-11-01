@@ -369,12 +369,17 @@
       var base = candidates[i];
       try {
         var ctrl = new AbortController();
-        var timer = setTimeout(function() { ctrl.abort(); }, 1800);
-        var res = await fetch(base + '/__flippy_yt_ping', { signal: ctrl.signal });
+        var timer = setTimeout(function() { ctrl.abort(); }, 2200);
+        var res = await fetch(base + '/__flippy_yt_ping', { signal: ctrl.signal, cache: 'no-store' });
         clearTimeout(timer);
         if (res.ok) {
           var j = await res.json();
-          if (j && j.ok && (base === '' || j.streamProxy === true || (j.engine && String(j.engine).indexOf('v3') !== -1))) {
+          if (
+            j &&
+            j.ok &&
+            j.canDownload !== false &&
+            (base === '' || j.streamProxy === true || (j.engine && String(j.engine).indexOf('v3') !== -1))
+          ) {
             state.backendApiBase = base;
             return base;
           }
@@ -547,21 +552,13 @@
     updateUI();
   }
 
-  // Allow ONLY local Blob URLs or same-origin / configured Flippy stream endpoints — NEVER external ad URLs
+  // Allow ONLY verified in-memory Blob URLs — prevents ANY external redirect OR .json error file download
   function isSafeDownloadHref(href) {
     if (typeof href !== 'string' || !href || href === '#') return false;
-    if (href.indexOf('blob:') === 0) return true;
-    if (href.indexOf('/__flippy_yt_stream') === 0) return true;
-    if (typeof state.backendApiBase === 'string' && state.backendApiBase.length > 0) {
-      if (href.indexOf(state.backendApiBase + '/__flippy_yt_stream') === 0) return true;
-    }
-    if (window.location && window.location.origin && href.indexOf(window.location.origin + '/__flippy_yt_stream') === 0) {
-      return true;
-    }
-    return false;
+    return href.indexOf('blob:') === 0;
   }
 
-  // Verify binary buffer is genuine media and not an HTML redirect or JSON error page
+  // Verify binary buffer is genuine media and never an HTML page or JSON error response
   function isLikelyValidMediaChunk(uint8Chunk) {
     if (!uint8Chunk || uint8Chunk.byteLength < 16) return false;
     try {
@@ -571,12 +568,15 @@
         head += String.fromCharCode(uint8Chunk[i]);
       }
       var lower = head.replace(/^\s+/, '').toLowerCase();
+      if (!lower) return false;
+      var c0 = lower.charAt(0);
       if (
+        c0 === '<' ||
+        c0 === '{' ||
+        c0 === '[' ||
         lower.indexOf('<!doctype') === 0 ||
         lower.indexOf('<html') === 0 ||
-        lower.indexOf('<script') === 0 ||
-        lower.indexOf('{"error') === 0 ||
-        lower.indexOf('{"success":false') === 0
+        lower.indexOf('<script') === 0
       ) {
         return false;
       }
@@ -584,10 +584,10 @@
     return true;
   }
 
-  // Trigger standard browser file download (.mp4 / .m4a / .mp3) strictly from verified safe URLs
+  // Trigger standard browser file download (.mp4 / .m4a / .mp3) strictly from verified Blob URLs
   function triggerBrowserDownload(href, filename) {
     if (!isSafeDownloadHref(href)) {
-      console.warn('[YTConverter] Blocked unsafe external download URL:', href);
+      console.warn('[YTConverter] Blocked non-blob download URL:', href);
       return false;
     }
     var a = document.createElement('a');
@@ -624,21 +624,13 @@
       }
     }
 
-    // Fallback on Desktop or browsers without file-sharing sheet: save the .MP4 directly
+    // Fallback on Desktop or browsers without file-sharing sheet: save verified .MP4 Blob directly
     if (state.readyMedia.blobUrl) {
       triggerBrowserDownload(state.readyMedia.blobUrl, state.readyMedia.filename || 'video.mp4');
       if (btnLabel) {
         btnLabel.textContent = '✓ Saved .MP4 to Downloads';
         setTimeout(function() {
           btnLabel.textContent = isIOSDevice() ? 'Save Video to iPhone Photos' : 'Save / Share .MP4 Video';
-        }, 2500);
-      }
-    } else if (state.readyMedia.directUrl && isSafeDownloadHref(state.readyMedia.directUrl)) {
-      triggerBrowserDownload(state.readyMedia.directUrl, state.readyMedia.filename || 'video.mp4');
-      if (btnLabel) {
-        btnLabel.textContent = '✓ Downloading .MP4 Stream...';
-        setTimeout(function() {
-          btnLabel.textContent = isIOSDevice() ? 'Save Video to iPhone Photos' : '⬇ Save .MP4 Video';
         }, 2500);
       }
     }
@@ -764,54 +756,61 @@
           + '&filename=' + encodeURIComponent(finalFilename);
       }
 
-      // Reusable clean stream endpoint (mints a fresh token on-the-fly if single-use src was already consumed)
-      var reusableStreamUrl = apiPrefix + '/__flippy_yt_stream?url=' + encodeURIComponent(ytWatchUrl)
-        + '&format=' + encodeURIComponent(muxFmt)
-        + '&filename=' + encodeURIComponent(finalFilename);
+      var mediaRes = await fetch(streamUrl, { cache: 'no-store' });
+      var respType = (mediaRes.headers.get('content-type') || '').toLowerCase();
+      var isBlockedMime =
+        respType.indexOf('text/html') !== -1 ||
+        respType.indexOf('application/json') !== -1 ||
+        respType.indexOf('text/plain') !== -1;
+
+      if (!mediaRes.ok || isBlockedMime) {
+        var backendErrMsg = 'Could not stream MP4 video (HTTP ' + mediaRes.status + ')';
+        try {
+          var errJson = await mediaRes.json();
+          if (errJson && errJson.error) backendErrMsg = String(errJson.error);
+        } catch (_) {}
+        throw new Error(backendErrMsg);
+      }
 
       var mediaBlob = null;
-      try {
-        var mediaRes = await fetch(streamUrl, { cache: 'no-store' });
-        var respType = (mediaRes.headers.get('content-type') || '').toLowerCase();
-        var isBlockedMime = respType.indexOf('text/html') !== -1 || respType.indexOf('application/json') !== -1;
+      if (mediaRes.body && typeof mediaRes.body.getReader === 'function') {
+        var contentLen = Number(mediaRes.headers.get('content-length')) || 0;
+        var reader = mediaRes.body.getReader();
+        var chunks = [];
+        var received = 0;
 
-        if (mediaRes.ok && !isBlockedMime && mediaRes.body && typeof mediaRes.body.getReader === 'function') {
-          var contentLen = Number(mediaRes.headers.get('content-length')) || 0;
-          var reader = mediaRes.body.getReader();
-          var chunks = [];
-          var received = 0;
-
-          while (true) {
-            var step = await reader.read();
-            if (step.done) break;
-            if (step.value && step.value.byteLength > 0) {
-              chunks.push(step.value);
-              received += step.value.byteLength;
-              var mb = (received / (1024 * 1024)).toFixed(1);
-              if (contentLen > 0) {
-                var dlPct = Math.min(100, Math.round((received / contentLen) * 100));
-                if (progFill) progFill.style.width = (60 + Math.round(dlPct * 0.4)) + '%';
-                if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB (' + dlPct + '%)...';
-              } else {
-                if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB...';
-              }
-            }
-          }
-
-          if (received > 512 && chunks.length > 0 && isLikelyValidMediaChunk(chunks[0])) {
-            mediaBlob = new Blob(chunks, { type: mimeType });
-          }
-        } else if (mediaRes.ok && !isBlockedMime) {
-          var rawBlob = await mediaRes.blob();
-          if (rawBlob && rawBlob.size > 512) {
-            var headBuf = new Uint8Array(await rawBlob.slice(0, 96).arrayBuffer());
-            if (isLikelyValidMediaChunk(headBuf)) {
-              mediaBlob = new Blob([rawBlob], { type: mimeType });
+        while (true) {
+          var step = await reader.read();
+          if (step.done) break;
+          if (step.value && step.value.byteLength > 0) {
+            chunks.push(step.value);
+            received += step.value.byteLength;
+            var mb = (received / (1024 * 1024)).toFixed(1);
+            if (contentLen > 0) {
+              var dlPct = Math.min(100, Math.round((received / contentLen) * 100));
+              if (progFill) progFill.style.width = (60 + Math.round(dlPct * 0.4)) + '%';
+              if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB (' + dlPct + '%)...';
+            } else {
+              if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB...';
             }
           }
         }
-      } catch (_) {
-        mediaBlob = null;
+
+        if (received > 1024 && chunks.length > 0 && isLikelyValidMediaChunk(chunks[0])) {
+          mediaBlob = new Blob(chunks, { type: mimeType });
+        }
+      } else {
+        var rawBlob = await mediaRes.blob();
+        if (rawBlob && rawBlob.size > 1024) {
+          var headBuf = new Uint8Array(await rawBlob.slice(0, 96).arrayBuffer());
+          if (isLikelyValidMediaChunk(headBuf)) {
+            mediaBlob = new Blob([rawBlob], { type: mimeType });
+          }
+        }
+      }
+
+      if (!mediaBlob) {
+        throw new Error('Stream verification failed — non-media payload rejected. Please try again.');
       }
 
       if (progFill) progFill.style.width = '100%';
@@ -822,33 +821,23 @@
       var directLink = document.getElementById('ytcDirectMp4Link');
       var savePhotosLabel = document.getElementById('ytcSaveToPhotosLabel');
 
-      state.readyMedia.directUrl = reusableStreamUrl;
+      var blobUrl = URL.createObjectURL(mediaBlob);
+      var fileObj = new File([mediaBlob], finalFilename, { type: mimeType, lastModified: Date.now() });
+
+      state.readyMedia.blobUrl = blobUrl;
+      state.readyMedia.directUrl = blobUrl;
+      state.readyMedia.file = fileObj;
       state.readyMedia.filename = finalFilename;
       if (readyFilenameEl) readyFilenameEl.textContent = finalFilename;
 
-      if (mediaBlob) {
-        var blobUrl = URL.createObjectURL(mediaBlob);
-        var fileObj = new File([mediaBlob], finalFilename, { type: mimeType, lastModified: Date.now() });
-        state.readyMedia.blobUrl = blobUrl;
-        state.readyMedia.file = fileObj;
-
-        if (player) {
-          player.style.display = (outExt === 'mp4') ? 'block' : 'none';
-          if (outExt === 'mp4') player.src = blobUrl;
-        }
-        if (directLink) {
-          directLink.href = blobUrl;
-          directLink.download = finalFilename;
-          directLink.textContent = '⬇ Save .' + outExt.toUpperCase() + ' File';
-        }
-      } else {
-        // Safe same-origin stream fallback — NEVER exposes third-party URLs
-        if (player) player.style.display = 'none';
-        if (directLink) {
-          directLink.href = reusableStreamUrl;
-          directLink.download = finalFilename;
-          directLink.textContent = '⬇ Download .' + outExt.toUpperCase() + ' Directly';
-        }
+      if (player) {
+        player.style.display = (outExt === 'mp4') ? 'block' : 'none';
+        if (outExt === 'mp4') player.src = blobUrl;
+      }
+      if (directLink) {
+        directLink.href = blobUrl;
+        directLink.download = finalFilename;
+        directLink.textContent = '⬇ Save .' + outExt.toUpperCase() + ' File';
       }
 
       var canShareFile = !!(state.readyMedia.file && navigator.canShare && navigator.canShare({ files: [state.readyMedia.file] }));
@@ -862,13 +851,12 @@
 
       if (readyBox) readyBox.style.display = 'flex';
 
-      // On Desktop / Android (when not in iPhone Photos Share-Sheet wait mode), immediately save the .MP4 file!
+      // On Desktop / Android (when not in iPhone Photos Share-Sheet wait mode), immediately save the verified .MP4 Blob!
       var usePhotosShareFirst = (isIOSDevice() || state.activePreset === 'iphone_photos') && canShareFile;
       if (usePhotosShareFirst) {
         if (progText) progText.textContent = '✓ MP4 Ready! Tap "Save Video to iPhone Photos" below → choose "Save Video".';
       } else {
-        var dlTarget = state.readyMedia.blobUrl || reusableStreamUrl;
-        if (dlTarget && triggerBrowserDownload(dlTarget, finalFilename)) {
+        if (triggerBrowserDownload(blobUrl, finalFilename)) {
           if (progText) progText.textContent = '✓ Downloaded real .' + outExt.toUpperCase() + ' file (' + finalFilename + ')!';
         } else {
           if (progText) progText.textContent = '✓ Ready! Click "Save .' + outExt.toUpperCase() + ' File" below to download.';
@@ -1033,19 +1021,13 @@
     var directMp4Link = document.getElementById('ytcDirectMp4Link');
     if (directMp4Link) {
       directMp4Link.addEventListener('click', function(e) {
-        if (state.readyMedia.blobUrl) {
+        if (state.readyMedia.blobUrl && isSafeDownloadHref(state.readyMedia.blobUrl)) {
           directMp4Link.href = state.readyMedia.blobUrl;
           directMp4Link.download = state.readyMedia.filename || 'video.mp4';
           return;
         }
-        var currentHref = directMp4Link.getAttribute('href') || '';
-        if (!isSafeDownloadHref(currentHref)) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (state.readyMedia.directUrl && isSafeDownloadHref(state.readyMedia.directUrl)) {
-            triggerBrowserDownload(state.readyMedia.directUrl, state.readyMedia.filename || 'video.mp4');
-          }
-        }
+        e.preventDefault();
+        e.stopPropagation();
       });
     }
 

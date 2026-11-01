@@ -179,7 +179,8 @@ async function verifyYoutubeCompliance(ytUrl) {
   }
 }
 
-const YT_DIRECT_API_TOKEN = 'dfcb6d76f2f6a9894gjkege8a4ab232222';
+const YT_UA_MOBILE = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Mobile Safari/537.36';
+const SAVETUBE_KEY_HEX = 'C5D58EF67A7584E4A29F6C35BBC4EB12';
 
 function sanitizeDownloadFilename(rawName, fallbackExt = 'mp4') {
   const cleaned = String(rawName || '')
@@ -191,67 +192,72 @@ function sanitizeDownloadFilename(rawName, fallbackExt = 'mp4') {
   return cleaned;
 }
 
-function isAllowedMediaStorageHost(hostname) {
-  const h = String(hostname || '').toLowerCase();
-  return (
-    h === 'savenow.to' || h.endsWith('.savenow.to') ||
-    h === 'lbserver.xyz' || h.endsWith('.lbserver.xyz') ||
-    h === 'loader.to' || h.endsWith('.loader.to') ||
-    h === 'googlevideo.com' || h.endsWith('.googlevideo.com') ||
-    h === '4kdownload.to' || h.endsWith('.4kdownload.to') ||
-    h === 'y2down.cc' || h.endsWith('.y2down.cc')
-  );
-}
-
 function isBlockedAdUrl(urlObj) {
-  if (!urlObj || (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:')) return true;
+  if (!urlObj || urlObj.protocol !== 'https:') return true;
   const h = urlObj.hostname.toLowerCase();
   const p = urlObj.pathname.toLowerCase();
-  if (!isAllowedMediaStorageHost(h)) return true;
-  if (p.includes('/ajax/ad') || p.includes('/ad/') || h.includes('hai8g')) return true;
+  if (h === 'localhost' || h.endsWith('.local') || /^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|0\.|169\.254\.)/.test(h)) return true;
+  if (p.includes('/ajax/ad') || p.includes('/ad/') || h.includes('hai8g') || h.includes('savenow.to')) return true;
   return false;
 }
 
-async function fetchUpstreamYtJson(pathname, queryObj) {
-  const hosts = ['https://p.savenow.to', 'https://p.lbserver.xyz'];
-  const qs = new URLSearchParams(queryObj).toString();
-  let lastErr = null;
-
-  for (const host of hosts) {
-    try {
-      const r = await fetch(`${host}${pathname}?${qs}`, {
-        method: 'GET',
-        headers: {
-          'Origin': 'https://en.loader.to',
-          'Referer': 'https://en.loader.to/',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-          'Accept': 'application/json'
-        }
-      });
-      if (r.ok) return await r.json();
-      lastErr = new Error(`Upstream HTTP ${r.status}`);
-    } catch (err) {
-      lastErr = err;
-    }
-  }
-  throw lastErr || new Error('Upstream MP4 muxer unavailable');
+function decryptSaveTubeNode(encB64) {
+  const raw = Buffer.from(String(encB64).replace(/\s+/g, ''), 'base64');
+  const decipher = crypto.createDecipheriv('aes-128-cbc', Buffer.from(SAVETUBE_KEY_HEX, 'hex'), raw.subarray(0, 16));
+  return JSON.parse(Buffer.concat([decipher.update(raw.subarray(16)), decipher.final()]).toString('utf8'));
 }
 
-async function openCleanUpstreamReader(rawSrcUrl) {
+async function resolveFallbackCloudUrl(ytUrl, format) {
+  const wantAudio = ['mp3', 'm4a', 'aac', 'wav', 'flac', 'opus'].includes(format);
+  try {
+    const { cdn } = await (await fetch('https://media.savetube.vip/api/random-cdn', {
+      headers: { 'User-Agent': YT_UA_MOBILE, 'Referer': 'https://save-tube.com/', 'Origin': 'https://save-tube.com' }
+    })).json();
+    const infoRes = await (await fetch(`https://${cdn}/v2/info`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': YT_UA_MOBILE, 'Referer': 'https://save-tube.com/', 'Origin': 'https://save-tube.com' },
+      body: JSON.stringify({ url: ytUrl })
+    })).json();
+    const decoded = decryptSaveTubeNode(infoRes.data);
+    const stQ = wantAudio ? '128' : (['720', '480', '360'].includes(format) ? format : '1080');
+    const dlRes = await (await fetch(`https://${cdn}/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': YT_UA_MOBILE, 'Referer': 'https://save-tube.com/', 'Origin': 'https://save-tube.com' },
+      body: JSON.stringify({ downloadType: wantAudio ? 'audio' : 'video', quality: stQ, key: decoded.key })
+    })).json();
+    if (dlRes && dlRes.data && dlRes.data.downloadUrl) {
+      return { streamUrl: String(dlRes.data.downloadUrl), referer: 'https://save-tube.com/', title: decoded.title || '' };
+    }
+  } catch (_) {}
+
+  const r = await fetch('https://rue-cobalt.xenon.zone/', {
+    method: 'POST',
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json', 'User-Agent': YT_UA_MOBILE },
+    body: JSON.stringify(wantAudio
+      ? { url: ytUrl, downloadMode: 'audio', audioFormat: format === 'wav' ? 'wav' : 'mp3' }
+      : { url: ytUrl, videoQuality: ({ '4k': '2160', '1440': '1440', '1080': '1080', '720': '720', '480': '480', '360': '360' })[format] || '1080', youtubeVideoCodec: 'h264' })
+  });
+  const j = await r.json();
+  if ((j.status === 'tunnel' || j.status === 'redirect') && j.url) {
+    return { streamUrl: String(j.url), referer: '', title: j.filename || '' };
+  }
+  throw new Error('Upstream MP4 muxer unavailable');
+}
+
+async function openCleanUpstreamReader(rawSrcUrl, referer = 'https://save-tube.com/') {
   let current;
   try { current = new URL(String(rawSrcUrl || '').trim()); } catch (_) { return null; }
   if (current.protocol === 'http:') current.protocol = 'https:';
   if (isBlockedAdUrl(current)) return null;
 
   let upstreamRes = null;
-  for (let hop = 0; hop < 4; hop++) {
+  for (let hop = 0; hop < 3; hop++) {
+    const hdrs = { 'User-Agent': YT_UA_MOBILE };
+    if (referer) hdrs['Referer'] = referer;
     const r = await fetch(current.href, {
       method: 'GET',
       redirect: 'manual',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-        'Referer': 'https://en.loader.to/'
-      }
+      headers: hdrs
     });
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get('location');
@@ -284,13 +290,13 @@ async function openCleanUpstreamReader(rawSrcUrl) {
       break;
     }
   }
-  if (!firstChunk || firstChunk.byteLength === 0) {
+  if (!firstChunk || firstChunk.byteLength < 16) {
     try { await reader.cancel(); } catch (_) {}
     return null;
   }
 
   const headText = Buffer.from(firstChunk.subarray(0, Math.min(96, firstChunk.byteLength))).toString('utf8').trimStart().toLowerCase();
-  if (headText.startsWith('<!doctype') || headText.startsWith('<html') || headText.startsWith('<script') || headText.startsWith('{"error') || headText.startsWith('{"success":false')) {
+  if (headText.startsWith('<!doctype') || headText.startsWith('<html') || headText.startsWith('<script') || headText.startsWith('{') || headText.startsWith('[')) {
     try { await reader.cancel(); } catch (_) {}
     return null;
   }
@@ -298,7 +304,7 @@ async function openCleanUpstreamReader(rawSrcUrl) {
   return {
     reader,
     firstChunk,
-    contentType: contentType || 'video/mp4',
+    contentType: contentType && contentType !== 'application/octet-stream' ? contentType : 'video/mp4',
     contentLength: upstreamRes.headers.get('content-length') || ''
   };
 }
@@ -315,7 +321,7 @@ const server = http.createServer(async (req, res) => {
 
   // Direct MP4 Stream Proxy Routes (Mobile / iPhone Photos & Desktop)
   if (pathname === '/__flippy_yt_ping') {
-    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', streamProxy: true, ytdlp: HAS_YTDLP });
+    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', streamProxy: true, canDownload: true, ytdlp: HAS_YTDLP });
   }
 
   if (pathname === '/__flippy_yt_dl') {
@@ -412,23 +418,16 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const data = await fetchUpstreamYtJson('/ajax/download.php', {
-        copyright: '0',
+      const resolved = await resolveFallbackCloudUrl(ytUrl, format);
+      return sendYtJson(res, 200, {
+        success: 1,
+        id: 'yt_' + Date.now().toString(36),
+        progress: 1000,
+        text: 'Finished',
+        title: resolved.title || '',
         format,
-        url: ytUrl,
-        api: YT_DIRECT_API_TOKEN
+        download_url: '/__flippy_yt_stream?src=' + encodeURIComponent(resolved.streamUrl)
       });
-      const cleanPayload = {
-        success: Boolean(data && data.success),
-        id: data && data.id ? String(data.id) : '',
-        title: (data && data.title) || '',
-        info: (data && data.info) || null,
-        format
-      };
-      if (data && data.download_url) {
-        cleanPayload.download_url = '/__flippy_yt_stream?src=' + encodeURIComponent(String(data.download_url));
-      }
-      return sendYtJson(res, 200, cleanPayload);
     } catch (err) {
       return sendYtJson(res, 502, { success: false, error: err.message || 'Stream engine unreachable' });
     }
@@ -464,21 +463,11 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
-    try {
-      const data = await fetchUpstreamYtJson('/ajax/progress.php', { id });
-      const cleanProgress = {
-        success: data && data.success !== undefined ? Number(data.success) : 0,
-        progress: data && typeof data.progress === 'number' ? data.progress : 0,
-        text: (data && data.text) || 'Processing',
-        download_url: null
-      };
-      if (data && data.download_url && Number(data.success) === 1) {
-        cleanProgress.download_url = '/__flippy_yt_stream?src=' + encodeURIComponent(String(data.download_url));
-      }
-      return sendYtJson(res, 200, cleanProgress);
-    } catch (err) {
-      return sendYtJson(res, 502, { success: false, error: err.message || 'Progress poll failed' });
-    }
+    return sendYtJson(res, 200, {
+      success: 1,
+      progress: 1000,
+      text: 'Finished'
+    });
   }
 
   // Direct Binary Stream Endpoint (Zero Popups, Zero Third-Party Ad Redirects)
@@ -535,27 +524,9 @@ const server = http.createServer(async (req, res) => {
         return sendYtJson(res, 403, { success: false, error: compliance.reason });
       }
       try {
-        const initData = await fetchUpstreamYtJson('/ajax/download.php', {
-          copyright: '0',
-          format,
-          url: ytUrl,
-          api: YT_DIRECT_API_TOKEN
-        });
-        let freshSrc = initData && initData.download_url ? String(initData.download_url) : '';
-        const jobId = initData && initData.id ? String(initData.id) : '';
-        if (!freshSrc && jobId) {
-          for (let p = 0; p < 24; p++) {
-            await new Promise(r => setTimeout(r, 1100));
-            const pData = await fetchUpstreamYtJson('/ajax/progress.php', { id: jobId });
-            if (pData && pData.download_url && Number(pData.success) === 1) {
-              freshSrc = String(pData.download_url);
-              break;
-            }
-            if (pData && pData.progress >= 1000 && !pData.download_url) break;
-          }
-        }
-        if (freshSrc) {
-          opened = await openCleanUpstreamReader(freshSrc);
+        const resolved = await resolveFallbackCloudUrl(ytUrl, format);
+        if (resolved && resolved.streamUrl) {
+          opened = await openCleanUpstreamReader(resolved.streamUrl, resolved.referer || '');
         }
       } catch (_) {
         opened = null;
