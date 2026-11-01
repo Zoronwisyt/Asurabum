@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4.0">
+  <link rel="stylesheet" href="styles.css?v=5.3">
 </head>
 <body class="locked">
 
@@ -1624,6 +1624,21 @@
                 <option value="wav">.WAV (Lossless Audio)</option>
               </select>
             </div>
+
+            <!-- Bitrate Slider -->
+            <div class="ytc-bitrate-block">
+              <div class="xg-prop-row">
+                <span class="xg-prop-label">Video Bitrate</span>
+                <span class="ytc-bitrate-readout" id="ytcVideoBitrateValue">Auto</span>
+              </div>
+              <input type="range" id="ytcVideoBitrateSlider" class="ytc-bitrate-slider" min="0" max="60" step="0.5" value="0" aria-label="Video bitrate in Mbps (0 = Auto)">
+              <div class="xg-prop-row">
+                <span class="xg-prop-label">Audio Bitrate</span>
+                <span class="ytc-bitrate-readout" id="ytcAudioBitrateValue">Auto</span>
+              </div>
+              <input type="range" id="ytcAudioBitrateSlider" class="ytc-bitrate-slider" min="0" max="320" step="32" value="0" aria-label="Audio bitrate in kbps (0 = Auto)">
+              <div class="ytc-bitrate-hint" id="ytcBitrateHint">Auto = source quality. Est. size: —</div>
+            </div>
           </div>
 
           <!-- Optional Sub-Clip Range -->
@@ -2070,8 +2085,8 @@
     </nav>
   </div>
 
-  <script src="ytconverter.js?v=5.2"></script>
-  <script src="app.js?v=5.2"></script>
-  <script src="fx.js?v=5.2"></script>
+  <script src="ytconverter.js?v=5.3"></script>
+  <script src="app.js?v=5.3"></script>
+  <script src="fx.js?v=5.3"></script>
 </body>
 </html>

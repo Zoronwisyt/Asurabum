@@ -5153,6 +5153,41 @@ select.ph-btn {
   color: var(--magenta);
 }
 
+/* YT Converter Bitrate Sliders */
+.ytc-bitrate-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line-mid);
+}
+
+.ytc-bitrate-readout {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.ytc-bitrate-slider {
+  width: 100%;
+  accent-color: var(--cyan);
+  cursor: pointer;
+}
+
+.ytc-bitrate-slider:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.ytc-bitrate-hint {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.4;
+}
+
 .ytc-main-dl-btn {
   width: 100%;
   justify-content: center;

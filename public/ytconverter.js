@@ -127,8 +127,11 @@
       trimEnabled: false,
       trimStart: '00:00:00',
       trimEnd: '00:00:30',
+      videoBitrateMbps: 0, // 0 = Auto (source quality)
+      audioBitrateKbps: 0, // 0 = Auto (source quality)
       legalAttested: true
     },
+    backendCaps: { ffmpeg: false },
     readyMedia: {
       blobUrl: null,
       directUrl: null,
@@ -270,6 +273,23 @@
     };
   }
 
+  // Typical YouTube H.264 bitrate per tier (Mbps) - used to cap tier by bitrate slider
+  var TIER_BITRATE_MBPS = [
+    { fmt: '4k', h: 2160, mbps: 35 },
+    { fmt: '1440', h: 1440, mbps: 16 },
+    { fmt: '1080', h: 1080, mbps: 8 },
+    { fmt: '720', h: 720, mbps: 5 },
+    { fmt: '480', h: 480, mbps: 2.5 }
+  ];
+
+  function selectedTierIndex() {
+    var r = state.settings.resolution;
+    for (var i = 0; i < TIER_BITRATE_MBPS.length; i++) {
+      if (r.indexOf(String(TIER_BITRATE_MBPS[i].h)) === 0) return i;
+    }
+    return 2;
+  }
+
   // Map UI settings to upstream muxer format code
   function mapSettingsToMuxFormat() {
     var s = state.settings;
@@ -279,12 +299,40 @@
       if (s.container === 'm4a' || s.audioCodec === 'aac') return 'm4a';
       return 'mp3';
     }
-    if (s.resolution.indexOf('2160') === 0) return '4k';
-    if (s.resolution.indexOf('1440') === 0) return '1440';
-    if (s.resolution.indexOf('1080') === 0) return '1080';
-    if (s.resolution.indexOf('720') === 0) return '720';
-    if (s.resolution.indexOf('480') === 0) return '480';
-    return '1080';
+    var idx = selectedTierIndex();
+    // Without server-side transcode, slider caps the quality tier to the highest tier whose typical bitrate fits
+    if (s.videoBitrateMbps > 0 && !state.backendCaps.ffmpeg) {
+      while (idx < TIER_BITRATE_MBPS.length - 1 && TIER_BITRATE_MBPS[idx].mbps > s.videoBitrateMbps) idx++;
+    }
+    return TIER_BITRATE_MBPS[idx].fmt;
+  }
+
+  function needsTranscode() {
+    var s = state.settings;
+    return Boolean(state.backendCaps && state.backendCaps.ffmpeg && (s.videoBitrateMbps > 0 || s.audioBitrateKbps > 0));
+  }
+
+  function updateBitrateUI() {
+    var s = state.settings;
+    var vEl = document.getElementById('ytcVideoBitrateValue');
+    var aEl = document.getElementById('ytcAudioBitrateValue');
+    var hint = document.getElementById('ytcBitrateHint');
+    var isAudio = s.resolution === 'audio';
+
+    if (vEl) vEl.textContent = isAudio ? 'N/A' : (s.videoBitrateMbps > 0 ? s.videoBitrateMbps.toFixed(1) + ' Mbps' : 'Auto');
+    if (aEl) aEl.textContent = s.audioBitrateKbps > 0 ? s.audioBitrateKbps + ' kbps' : 'Auto';
+    var vSlider = document.getElementById('ytcVideoBitrateSlider');
+    if (vSlider) vSlider.disabled = isAudio;
+    if (!hint) return;
+
+    var vMbps = isAudio ? 0 : (s.videoBitrateMbps > 0 ? s.videoBitrateMbps : TIER_BITRATE_MBPS[selectedTierIndex()].mbps);
+    var aKbps = s.audioBitrateKbps > 0 ? s.audioBitrateKbps : (isAudio ? 256 : 160);
+    var mbPerMin = ((vMbps * 1000 + aKbps) * 60) / 8 / 1024;
+    var mode;
+    if (s.videoBitrateMbps === 0 && s.audioBitrateKbps === 0) mode = 'Auto = source quality.';
+    else if (state.backendCaps && state.backendCaps.ffmpeg) mode = 'Exact re-encode via local FFmpeg.';
+    else mode = 'Quality tier capped at ' + mapSettingsToMuxFormat().toUpperCase() + '.';
+    hint.textContent = mode + ' Est. ~' + mbPerMin.toFixed(1) + ' MB/min';
   }
 
   function getOutputExtension() {
@@ -351,6 +399,10 @@
       cmd += ' --download-sections "*' + s.trimStart + '-' + s.trimEnd + '" --force-keyframes-at-cuts';
     }
 
+    if (s.videoBitrateMbps > 0) {
+      cmd += ' --postprocessor-args "ffmpeg:-b:v ' + Math.round(s.videoBitrateMbps * 1000) + 'k -maxrate ' + Math.round(s.videoBitrateMbps * 1000) + 'k"';
+    }
+
     cmd += ' "' + url + '"';
     return cmd;
   }
@@ -381,6 +433,8 @@
             (base === '' || j.streamProxy === true || (j.engine && String(j.engine).indexOf('v3') !== -1))
           ) {
             state.backendApiBase = base;
+            if (j.ffmpeg) state.backendCaps.ffmpeg = true;
+            updateBitrateUI();
             return base;
           }
         }
@@ -401,16 +455,22 @@
     state.settings.videoCodec = p.videoCodec;
     state.settings.audioCodec = p.audioCodec;
     state.settings.container = p.container;
+    state.settings.videoBitrateMbps = 0;
+    state.settings.audioBitrateKbps = 0;
 
     var resEl = document.getElementById('ytcResolutionSelect');
     var vcEl = document.getElementById('ytcVideoCodecSelect');
     var acEl = document.getElementById('ytcAudioCodecSelect');
     var ctEl = document.getElementById('ytcContainerSelect');
+    var vbSlider = document.getElementById('ytcVideoBitrateSlider');
+    var abSlider = document.getElementById('ytcAudioBitrateSlider');
 
     if (resEl) resEl.value = p.resolution;
     if (vcEl) vcEl.value = p.videoCodec;
     if (acEl) acEl.value = p.audioCodec;
     if (ctEl) ctEl.value = p.container;
+    if (vbSlider) vbSlider.value = '0';
+    if (abSlider) abSlider.value = '0';
 
     document.querySelectorAll('.ytc-preset-btn').forEach(function(btn) {
       btn.classList.toggle('active', btn.getAttribute('data-preset') === presetKey);
@@ -425,6 +485,7 @@
 
   // Update UI State
   function updateUI() {
+    updateBitrateUI();
     var statusBadge = document.getElementById('ytcComplianceBadge');
     var statusReason = document.getElementById('ytcComplianceReason');
     var statusRule = document.getElementById('ytcComplianceRule');
@@ -744,7 +805,18 @@
       if (progText) progText.textContent = 'Downloading .' + outExt.toUpperCase() + ' file to device memory...';
 
       var streamUrl;
-      if (directDownloadUrl.indexOf('/__flippy_yt_stream') === 0) {
+      if (needsTranscode()) {
+        var tq = 'src=' + encodeURIComponent(directDownloadUrl.indexOf('/__flippy_yt_stream') === 0 ? (apiPrefix + directDownloadUrl) : directDownloadUrl)
+          + '&ext=' + encodeURIComponent(outExt);
+        if (state.settings.videoBitrateMbps > 0 && outExt === 'mp4') {
+          tq += '&vb=' + Math.round(state.settings.videoBitrateMbps * 1000);
+        }
+        if (state.settings.audioBitrateKbps > 0) {
+          tq += '&ab=' + state.settings.audioBitrateKbps;
+        }
+        streamUrl = apiPrefix + '/__flippy_yt_transcode?' + tq;
+        if (progText) progText.textContent = 'Transcoding to target bitrate via local FFmpeg (' + (state.settings.videoBitrateMbps > 0 ? (state.settings.videoBitrateMbps + ' Mbps') : 'auto') + ')...';
+      } else if (directDownloadUrl.indexOf('/__flippy_yt_stream') === 0) {
         streamUrl = apiPrefix + directDownloadUrl
           + '&url=' + encodeURIComponent(ytWatchUrl)
           + '&format=' + encodeURIComponent(muxFmt)
@@ -983,6 +1055,23 @@
     bindSelect('ytcVideoCodecSelect', 'videoCodec');
     bindSelect('ytcAudioCodecSelect', 'audioCodec');
     bindSelect('ytcContainerSelect', 'container');
+
+    var vbSlider = document.getElementById('ytcVideoBitrateSlider');
+    var abSlider = document.getElementById('ytcAudioBitrateSlider');
+    if (vbSlider) {
+      vbSlider.addEventListener('input', function() {
+        state.settings.videoBitrateMbps = parseFloat(vbSlider.value) || 0;
+        clearReadyMedia();
+        updateUI();
+      });
+    }
+    if (abSlider) {
+      abSlider.addEventListener('input', function() {
+        state.settings.audioBitrateKbps = parseInt(abSlider.value, 10) || 0;
+        clearReadyMedia();
+        updateUI();
+      });
+    }
 
     var trimToggle = document.getElementById('ytcTrimToggle');
     var trimRow = document.getElementById('ytcTrimRow');

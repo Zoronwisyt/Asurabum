@@ -25,6 +25,13 @@ try {
   HAS_YTDLP = false;
 }
 
+let HAS_FFMPEG = false;
+try {
+  HAS_FFMPEG = spawnSync(FFMPEG_BIN, ['-version'], { stdio: 'ignore', timeout: 4000 }).status === 0;
+} catch (_) {
+  HAS_FFMPEG = false;
+}
+
 // In-memory active direct video jobs (100% ad-free & popup-free)
 const ACTIVE_YT_JOBS = new Map();
 
@@ -321,7 +328,49 @@ const server = http.createServer(async (req, res) => {
 
   // Direct MP4 Stream Proxy Routes (Mobile / iPhone Photos & Desktop)
   if (pathname === '/__flippy_yt_ping') {
-    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', streamProxy: true, canDownload: true, ytdlp: HAS_YTDLP });
+    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', streamProxy: true, canDownload: true, ytdlp: HAS_YTDLP, ffmpeg: HAS_FFMPEG });
+  }
+
+  // Exact target bitrate transcode endpoint via server FFmpeg
+  if (pathname === '/__flippy_yt_transcode') {
+    const src = (urlObj.searchParams.get('src') || '').trim();
+    const ext = (urlObj.searchParams.get('ext') || 'mp4').toLowerCase();
+    const vb = Math.max(0, Math.min(80000, parseInt(urlObj.searchParams.get('vb') || '0', 10) || 0)); // kbps
+    const ab = Math.max(0, Math.min(320, parseInt(urlObj.searchParams.get('ab') || '0', 10) || 0)); // kbps
+
+    if (!HAS_FFMPEG) return sendYtJson(res, 501, { success: false, error: 'FFmpeg not available on server' });
+    let srcUrl;
+    try { srcUrl = new URL(src); } catch (_) { return sendYtJson(res, 400, { success: false, error: 'Bad src URL' }); }
+    if (srcUrl.protocol !== 'https:' && srcUrl.protocol !== 'http:') {
+      return sendYtJson(res, 400, { success: false, error: 'src must be an http(s) URL' });
+    }
+
+    const args = ['-hide_banner', '-loglevel', 'error', '-i', src];
+    let mime = 'video/mp4';
+    if (ext === 'mp3') {
+      args.push('-vn', '-c:a', 'libmp3lame', '-b:a', `${ab || 320}k`, '-f', 'mp3');
+      mime = 'audio/mpeg';
+    } else if (ext === 'm4a') {
+      args.push('-vn', '-c:a', 'aac', '-b:a', `${ab || 256}k`, '-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4');
+      mime = 'audio/mp4';
+    } else {
+      if (vb > 0) args.push('-c:v', 'libx264', '-preset', 'veryfast', '-b:v', `${vb}k`, '-maxrate', `${vb}k`, '-bufsize', `${vb * 2}k`, '-pix_fmt', 'yuv420p');
+      else args.push('-c:v', 'copy');
+      if (ab > 0) args.push('-c:a', 'aac', '-b:a', `${ab}k`);
+      else args.push('-c:a', 'copy');
+      args.push('-movflags', 'frag_keyframe+empty_moov', '-f', 'mp4');
+    }
+    args.push('pipe:1');
+
+    const ff = spawn(FFMPEG_BIN, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    setYtCors(res);
+    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': 'no-store' });
+    ff.stdout.pipe(res);
+    const kill = () => { try { ff.kill('SIGKILL'); } catch (_) {} };
+    req.on('close', kill);
+    ff.on('error', () => { if (!res.writableEnded) res.end(); });
+    ff.on('close', () => { if (!res.writableEnded) res.end(); });
+    return;
   }
 
   if (pathname === '/__flippy_yt_dl') {
