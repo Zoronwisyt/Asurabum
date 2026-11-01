@@ -1,67 +1,25 @@
 /**
  * YT Converter — Direct .MP4 Video Downloader (1080p / 4K 60fps) + iPhone "Save to Photos" Engine
- * Enforces Content & Channel Legal Compliance Gate (Blocks Licensed Movies & Anime Episodes)
+ * Allows all free YouTube streams (including Anime Twixtors, Clips & Episodes) · Blocks only Paid / Buy-or-Rent videos
  */
 (function(window, document) {
   'use strict';
 
   // =========================================================================
-  // 1. LEGAL COMPLIANCE & COPYRIGHT PROTECTION REGISTRY
+  // 1. PAID / PURCHASE-REQUIRED STREAM DETECTION REGISTRY
   // =========================================================================
   var BLOCKED_CHANNELS = [
-    'crunchyroll',
-    'crunchyroll collection',
-    'crunchyroll dubs',
-    'netflix',
-    'netflix anime',
-    'toei animation',
-    'muse asia',
-    'ani-one asia',
-    'aniplex',
-    'vizmedia',
-    'viz media',
-    'funimation',
-    'kadokawa',
-    'kadokawaanime',
-    'mappa',
-    'mappa channel',
-    'gundaminfo',
-    'bandai namco',
-    'tms entertainment',
-    'pony canyon',
-    'king amusement creative',
-    'toho animation',
-    'shonen jump',
-    'jump comics',
-    'sony pictures',
-    'sony pictures entertainment',
-    'warner bros. pictures',
-    'warner bros',
-    'universal pictures',
-    'paramount pictures',
-    'walt disney studios',
-    'marvel entertainment',
-    '20th century studios',
-    'lionsgate movies',
-    'mgm',
-    'a24',
     'youtube movies',
-    'prime video',
-    'hulu',
-    'peacock',
-    'hbo',
-    'max'
+    'youtube movies & tv',
+    'youtube primetime',
+    'google play movies & tv',
+    'movies & shows'
   ];
 
-  // Regex patterns for full movies and anime episode uploads
+  // Regex patterns for videos that explicitly require purchase or rental
   var BLOCKED_TITLE_PATTERNS = [
-    /\bfull\s+movie\b/i,
-    /\bfull\s+episode\b/i,
-    /\b(?:episode|ep\.?)\s*\d+\s*(?:\||-|\[|\(|full|eng\s*sub|sub|dub)/i,
-    /\bs\d{1,2}\s*e\d{1,3}\b/i,
-    /\b(?:eng(?:lish)?\s+sub(?:s|titled)?|multi\s*sub)\b.*\b(?:episode|ep\.?\s*\d+|anime)\b/i,
-    /\b(?:anime\s+full\s+episode|official\s+episode)\b/i,
-    /\b(?:complete\s+feature\s+film|official\s+full\s+movie)\b/i
+    /\b(?:buy\s+or\s+rent|rent\s+or\s+buy)\b/i,
+    /\b(?:requires\s+purchase|purchase\s+required|paid\s+rental)\b/i
   ];
 
   // Device & Camera Roll Presets
@@ -185,15 +143,24 @@
     return null;
   }
 
-  // Evaluate Legal & Channel Compliance
+  // Evaluate Paid / Purchase-Required Gate (All free YouTube videos & anime twixtors allowed)
   function evaluateCompliance(meta) {
     var title = (meta && meta.title) ? meta.title.trim() : '';
     var author = (meta && meta.author_name) ? meta.author_name.trim() : '';
     var authorLower = author.toLowerCase();
 
+    if (meta && meta.requiresPurchase) {
+      return {
+        checked: true,
+        allowed: false,
+        reason: 'Blocked: This video requires purchase or rental on YouTube (' + (author || 'Paid Storefront') + ').',
+        matchedRule: 'PAID_STREAM_GATE'
+      };
+    }
+
     var allBlocked = BLOCKED_CHANNELS.concat(state.customBlockedChannels);
 
-    // 1. Check specific channel blocklist
+    // 1. Check Paid Storefront Channels (e.g. YouTube Movies & TV)
     for (var i = 0; i < allBlocked.length; i++) {
       var blockedCh = allBlocked[i].toLowerCase().trim();
       if (!blockedCh) continue;
@@ -201,24 +168,24 @@
         return {
           checked: true,
           allowed: false,
-          reason: 'Restricted Channel: "' + author + '" is a protected Movie / Anime distributor.',
-          matchedRule: 'CHANNEL_POLICY (' + allBlocked[i] + ')'
+          reason: 'Blocked: "' + author + '" is a paid YouTube storefront that requires buying or renting this video.',
+          matchedRule: 'PAID_STOREFRONT (' + allBlocked[i] + ')'
         };
       }
     }
 
-    // 2. Check Title Patterns for Full Movies or Anime Episodes
+    // 2. Check Title Patterns for Buy / Rent Store Listings
     for (var p = 0; p < BLOCKED_TITLE_PATTERNS.length; p++) {
       var pat = BLOCKED_TITLE_PATTERNS[p];
       if (pat.test(title)) {
-        if (/trailer|teaser|pv|op\b|ed\b|opening|ending|ost/i.test(title) && !/full\s+(movie|episode)/i.test(title)) {
+        if (/trailer|teaser|preview|clip/i.test(title)) {
           continue;
         }
         return {
           checked: true,
           allowed: false,
-          reason: 'Restricted Content: Title matches protected Full Movie or Anime Episode broadcast pattern.',
-          matchedRule: 'CONTENT_PATTERN (' + pat.toString() + ')'
+          reason: 'Blocked: This video is marked as Buy or Rent and requires payment to watch.',
+          matchedRule: 'PURCHASE_REQUIRED (' + pat.toString() + ')'
         };
       }
     }
@@ -226,8 +193,8 @@
     return {
       checked: true,
       allowed: true,
-      reason: 'Cleared: Creator upload does not match restricted movie/anime distribution channels.',
-      matchedRule: 'PASS'
+      reason: 'Ready: Free YouTube stream verified (anime twixtors, edits & episodes supported).',
+      matchedRule: 'FREE_STREAM_ALLOWED'
     };
   }
 
@@ -538,8 +505,8 @@
         statusBadge.className = 'ytc-compliance-badge idle';
         statusBadge.textContent = 'AWAITING LINK';
       }
-      if (statusReason) statusReason.textContent = 'Paste a YouTube link above to verify channel & copyright eligibility.';
-      if (statusRule) statusRule.textContent = 'POLICY: NO FULL MOVIES / NO LICENSED ANIME EPISODES';
+      if (statusReason) statusReason.textContent = 'Paste any YouTube link (including anime twixtors, edits & clips) to verify stream availability.';
+      if (statusRule) statusRule.textContent = 'POLICY: FREE YOUTUBE STREAMS ALLOWED · PAID / BUY-OR-RENT VIDEOS BLOCKED';
       if (downloadBtn) downloadBtn.disabled = true;
       return;
     }
@@ -560,19 +527,19 @@
       if (state.compliance.allowed) {
         if (statusBadge) {
           statusBadge.className = 'ytc-compliance-badge pass';
-          statusBadge.textContent = 'VERIFIED CLEAR · PERMITTED';
+          statusBadge.textContent = 'FREE STREAM · READY TO DOWNLOAD';
         }
         if (statusReason) statusReason.textContent = state.compliance.reason;
-        if (statusRule) statusRule.textContent = 'RULE: ' + state.compliance.matchedRule;
-        if (downloadBtn) downloadBtn.disabled = !state.settings.legalAttested || state.isDownloading;
+        if (statusRule) statusRule.textContent = 'STATUS: ' + state.compliance.matchedRule;
+        if (downloadBtn) downloadBtn.disabled = state.isDownloading;
       } else {
         clearReadyMedia();
         if (statusBadge) {
           statusBadge.className = 'ytc-compliance-badge blocked';
-          statusBadge.textContent = 'BLOCKED · COPYRIGHT / LICENSED MEDIA';
+          statusBadge.textContent = 'BLOCKED · REQUIRES PURCHASE / RENTAL';
         }
         if (statusReason) statusReason.textContent = state.compliance.reason;
-        if (statusRule) statusRule.textContent = 'RULE: ' + state.compliance.matchedRule;
+        if (statusRule) statusRule.textContent = 'STATUS: ' + state.compliance.matchedRule;
         if (downloadBtn) downloadBtn.disabled = true;
       }
     }

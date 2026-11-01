@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5.3">
+  <link rel="stylesheet" href="styles.css?v=5.4">
 </head>
 <body class="locked">
 
@@ -667,10 +667,8 @@
               <div class="toggle-group" id="animTypeToggle">
                 <button class="toggle-btn" data-value="none">None</button>
                 <button class="toggle-btn active" data-value="flip">Flip</button>
-                <button class="toggle-btn" data-value="cube">Cube</button>
                 <button class="toggle-btn" data-value="box">Box</button>
                 <button class="toggle-btn" data-value="boxv2">Box V2</button>
-                <button class="toggle-btn" data-value="hollowbox">Hollow Box</button>
               </div>
               <div class="experimental-note">Selected motion effect applies 3D transformation keyframes to the Alight Motion XML.</div>
             </div>
@@ -1481,7 +1479,7 @@
               <polygon points="9.75 15.02 15.5 11.75 9.75 8.48 9.75 15.02"/>
             </svg>
           </span>
-          <span class="ph-text">YT Converter<small>High-Bitrate 1080p / 4K 60fps Video Importer · Codec Selector · Copyright &amp; Channel Compliance Gate</small></span>
+          <span class="ph-text">YT Converter<small>High-Bitrate 1080p / 4K 60fps Video Importer · Codec &amp; Bitrate Selector · Paid / Rental Stream Gate</small></span>
         </h2>
         <div class="xmlglsl-header-actions">
           <span class="ph-btn" id="ytcStreamSpecBadge" style="font-family: var(--font-mono); font-size: 11px; pointer-events: none;">2160P60 · H264 / AAC · .MP4</span>
@@ -1501,18 +1499,17 @@
             <button class="ph-btn ph-btn-primary" id="ytcAnalyzeBtn" type="button" style="white-space: nowrap; padding: 0 14px;">Analyze Link</button>
           </div>
 
-          <!-- Quick Test Presets to Verify Allowed vs Blocked Movie/Anime Channels -->
+          <!-- Quick Test Presets to Verify Free Streams (incl. Anime Twixtors) vs Paid Store Videos -->
           <div class="xg-prop-group">
             <div class="xg-prop-group-title">
-              <span>Compliance Test Presets</span>
+              <span>Stream Verification Presets</span>
               <span style="font-size: 10px; color: var(--text-3);">Instant Gate Check</span>
             </div>
             <div class="xg-quick-pills">
               <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Big Buck Bunny 60fps 4K - Blender Open Movie" data-author="Blender Foundation">✓ Open 4K60 Sample (Allowed)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw" data-title="Motion Design Showreel 2026 [4K 60FPS]" data-author="Indie VFX Creator">✓ Creator Edit (Allowed)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_anime1" data-title="Jujutsu Kaisen Season 2 - Episode 18 [Eng Sub]" data-author="Crunchyroll">✕ Crunchyroll Anime Ep (Blocked)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_anime2" data-title="One Piece Episode 1089 | Official English Sub" data-author="Toei Animation">✕ Toei Anime Episode (Blocked)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=blocked_movie1" data-title="Spider-Man: Across the Spider-Verse (2023) | Full Movie 4K" data-author="Sony Pictures Entertainment">✕ Studio Full Movie (Blocked)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw" data-title="Gojo vs Sukuna 4K 60FPS Anime Twixtor Scenepack" data-author="Twixtor Vault">✓ Anime Twixtor 4K60 (Allowed)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Jujutsu Kaisen Season 2 - Shibuya Clip [1080p60]" data-author="Crunchyroll">✓ Anime Channel Clip (Allowed)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=paid_movie1" data-title="Spider-Man: Across the Spider-Verse [Buy or Rent]" data-author="YouTube Movies &amp; TV">✕ Paid Store Movie (Requires Purchase)</button>
             </div>
           </div>
 
@@ -1527,11 +1524,11 @@
             </div>
           </div>
 
-          <!-- Live Legal & Channel Compliance Gate Readout -->
+          <!-- Live Paywall / Purchase Gate Readout -->
           <div class="ytc-compliance-box">
             <span class="ytc-compliance-badge idle" id="ytcComplianceBadge">AWAITING LINK</span>
-            <div class="ytc-compliance-reason" id="ytcComplianceReason">Paste a YouTube link above to verify channel &amp; copyright eligibility.</div>
-            <div class="ytc-compliance-rule" id="ytcComplianceRule">POLICY: NO FULL MOVIES / NO LICENSED ANIME EPISODES</div>
+            <div class="ytc-compliance-reason" id="ytcComplianceReason">Paste any YouTube link (including anime twixtors, edits &amp; clips) to verify stream availability.</div>
+            <div class="ytc-compliance-rule" id="ytcComplianceRule">POLICY: FREE YOUTUBE STREAMS ALLOWED · PAID / BUY-OR-RENT VIDEOS BLOCKED</div>
           </div>
         </div>
 
@@ -1660,13 +1657,8 @@
             </div>
           </div>
 
-          <!-- Rights Attestation & Real MP4 Download Action -->
+          <!-- Real MP4 Download Action -->
           <div class="xg-prop-group">
-            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11px; color: var(--text-2); cursor: pointer; line-height: 1.4;">
-              <input type="checkbox" id="ytcLegalAttestCheck" checked style="margin-top: 2px; accent-color: var(--accent);">
-              <span>I confirm this source is not a copyrighted feature film, theatrical motion picture, or licensed anime broadcast episode, and I hold rights or fair-use authorization for editing.</span>
-            </label>
-
             <button class="ph-btn ph-btn-primary ytc-main-dl-btn" id="ytcDownloadBtn" type="button" disabled>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
               <span id="ytcDownloadBtnLabel">Download .MP4 Video</span>
@@ -1714,23 +1706,23 @@
           </details>
         </div>
 
-        <!-- Column 3: Legal Guardrails, Restricted Movie/Anime Channels & Queue -->
+        <!-- Column 3: Paid / Purchase-Required Filter & Session Queue -->
         <div class="ytc-card">
           <div class="xmlglsl-card-title">
-            <span>03 · Legal Guardrails &amp; Channel Blocklist</span>
-            <span class="tag">DMCA Guard</span>
+            <span>03 · Purchase Gate &amp; Session Queue</span>
+            <span class="tag">Paywall Check</span>
           </div>
 
           <div class="xg-prop-group">
             <div class="xg-prop-group-title">
-              <span>Restricted Movie &amp; Anime Distributors</span>
+              <span>Paid / Buy-or-Rent Storefronts Blocked</span>
             </div>
             <div style="font-size: 11px; color: var(--text-2); line-height: 1.4;">
-              Downloads are automatically blocked when the source channel belongs to a licensed anime publisher or film studio, or when the title matches full-length movie / episodic broadcast patterns.
+              All free YouTube videos — including anime twixtors, scenepacks, AMVs, and episodes — are unlocked. Downloads are only blocked when a link requires purchase or rental on YouTube.
             </div>
             <div class="ytc-blocked-tags" id="ytcBlockedChannelsTags"></div>
             <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <input type="text" id="ytcCustomBlockedInput" placeholder="Add restricted channel name..." style="flex: 1; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); font-size: 11px; padding: 5px 8px; border-radius: var(--r-xs);">
+              <input type="text" id="ytcCustomBlockedInput" placeholder="Add custom blocked channel..." style="flex: 1; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); font-size: 11px; padding: 5px 8px; border-radius: var(--r-xs);">
               <button class="ph-btn" id="ytcAddBlockedChannelBtn" type="button" style="font-size: 11px; padding: 4px 10px;">+ Block</button>
             </div>
           </div>
@@ -2085,8 +2077,8 @@
     </nav>
   </div>
 
-  <script src="ytconverter.js?v=5.3"></script>
-  <script src="app.js?v=5.3"></script>
-  <script src="fx.js?v=5.3"></script>
+  <script src="ytconverter.js?v=5.4"></script>
+  <script src="app.js?v=5.4"></script>
+  <script src="fx.js?v=5.4"></script>
 </body>
 </html>

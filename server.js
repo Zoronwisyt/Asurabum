@@ -116,26 +116,16 @@ const MIME_TYPES = {
 };
 
 const YT_BLOCKED_CHANNELS = [
-  'crunchyroll', 'crunchyroll collection', 'crunchyroll dubs',
-  'netflix', 'netflix anime', 'toei animation', 'muse asia',
-  'ani-one asia', 'aniplex', 'vizmedia', 'viz media', 'funimation',
-  'kadokawa', 'kadokawaanime', 'mappa', 'mappa channel', 'gundaminfo',
-  'bandai namco', 'tms entertainment', 'pony canyon', 'toho animation',
-  'shonen jump', 'sony pictures', 'sony pictures entertainment',
-  'warner bros. pictures', 'warner bros', 'universal pictures',
-  'paramount pictures', 'walt disney studios', 'marvel entertainment',
-  '20th century studios', 'lionsgate movies', 'mgm', 'a24',
-  'youtube movies', 'prime video', 'hulu', 'peacock', 'hbo', 'max'
+  'youtube movies',
+  'youtube movies & tv',
+  'youtube primetime',
+  'google play movies & tv',
+  'movies & shows'
 ];
 
 const YT_BLOCKED_TITLE_PATTERNS = [
-  /\bfull\s+movie\b/i,
-  /\bfull\s+episode\b/i,
-  /\b(?:episode|ep\.?)\s*\d+\s*(?:\||-|\[|\(|full|eng\s*sub|sub|dub)/i,
-  /\bs\d{1,2}\s*e\d{1,3}\b/i,
-  /\b(?:eng(?:lish)?\s+sub(?:s|titled)?|multi\s*sub)\b.*\b(?:episode|ep\.?\s*\d+|anime)\b/i,
-  /\b(?:anime\s+full\s+episode|official\s+episode)\b/i,
-  /\b(?:complete\s+feature\s+film|official\s+full\s+movie)\b/i
+  /\b(?:buy\s+or\s+rent|rent\s+or\s+buy)\b/i,
+  /\b(?:requires\s+purchase|purchase\s+required|paid\s+rental)\b/i
 ];
 
 const YT_ALLOWED_FORMATS = new Set([
@@ -168,15 +158,18 @@ async function verifyYoutubeCompliance(ytUrl) {
       if (author === ch || author.includes(ch)) {
         return {
           allowed: false,
-          reason: `Restricted Channel: "${meta.author_name}" is a protected Movie / Anime distributor.`
+          reason: `Blocked: "${meta.author_name}" is a paid YouTube storefront that requires buying or renting this video.`
         };
       }
     }
     for (const pat of YT_BLOCKED_TITLE_PATTERNS) {
       if (pat.test(title)) {
+        if (/trailer|teaser|preview|clip/i.test(title)) {
+          continue;
+        }
         return {
           allowed: false,
-          reason: 'Restricted Content: Title matches protected Full Movie or Anime Episode broadcast pattern.'
+          reason: 'Blocked: This video is marked as Buy or Rent and requires purchase on YouTube.'
         };
       }
     }
@@ -446,6 +439,11 @@ const server = http.createServer(async (req, res) => {
         }
       });
 
+      let stderrBuf = '';
+      proc.stderr.on('data', chunk => {
+        stderrBuf += chunk.toString();
+      });
+
       proc.on('close', code => {
         if (code === 0 && fs.existsSync(outFilePath)) {
           jobRecord.status = 'ready';
@@ -453,7 +451,11 @@ const server = http.createServer(async (req, res) => {
           jobRecord.text = 'Finished';
         } else {
           jobRecord.status = 'failed';
-          jobRecord.text = 'Download failed';
+          if (/requires\s+payment|buy\s+or\s+rent|rent\s+or\s+buy|rental|paid\s+video/i.test(stderrBuf)) {
+            jobRecord.text = 'Blocked: This video requires purchase or rental on YouTube.';
+          } else {
+            jobRecord.text = 'Download failed';
+          }
           jobRecord.error = `yt-dlp exited with code ${code}`;
         }
       });
