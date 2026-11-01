@@ -179,6 +179,39 @@ async function verifyYoutubeCompliance(ytUrl) {
   }
 }
 
+const YT_DIRECT_API_TOKEN = 'dfcb6d76f2f6a9894gjkege8a4ab232222';
+
+function sanitizeDownloadFilename(rawName, fallbackExt = 'mp4') {
+  const cleaned = String(rawName || '')
+    .replace(/["\r\n<>:\\|?*\x00-\x1F]/g, '_')
+    .replace(/\s+/g, '_')
+    .slice(0, 110);
+  if (!cleaned) return `flippy_video.${fallbackExt}`;
+  if (!/\.[a-z0-9]{2,4}$/i.test(cleaned)) return `${cleaned}.${fallbackExt}`;
+  return cleaned;
+}
+
+function isAllowedMediaStorageHost(hostname) {
+  const h = String(hostname || '').toLowerCase();
+  return (
+    h === 'savenow.to' || h.endsWith('.savenow.to') ||
+    h === 'lbserver.xyz' || h.endsWith('.lbserver.xyz') ||
+    h === 'loader.to' || h.endsWith('.loader.to') ||
+    h === 'googlevideo.com' || h.endsWith('.googlevideo.com') ||
+    h === '4kdownload.to' || h.endsWith('.4kdownload.to') ||
+    h === 'y2down.cc' || h.endsWith('.y2down.cc')
+  );
+}
+
+function isBlockedAdUrl(urlObj) {
+  if (!urlObj || (urlObj.protocol !== 'https:' && urlObj.protocol !== 'http:')) return true;
+  const h = urlObj.hostname.toLowerCase();
+  const p = urlObj.pathname.toLowerCase();
+  if (!isAllowedMediaStorageHost(h)) return true;
+  if (p.includes('/ajax/ad') || p.includes('/ad/') || h.includes('hai8g')) return true;
+  return false;
+}
+
 async function fetchUpstreamYtJson(pathname, queryObj) {
   const hosts = ['https://p.savenow.to', 'https://p.lbserver.xyz'];
   const qs = new URLSearchParams(queryObj).toString();
@@ -189,9 +222,9 @@ async function fetchUpstreamYtJson(pathname, queryObj) {
       const r = await fetch(`${host}${pathname}?${qs}`, {
         method: 'GET',
         headers: {
-          'Origin': host,
-          'Referer': `${host}/api/button/`,
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+          'Origin': 'https://en.loader.to',
+          'Referer': 'https://en.loader.to/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
           'Accept': 'application/json'
         }
       });
@@ -202,6 +235,72 @@ async function fetchUpstreamYtJson(pathname, queryObj) {
     }
   }
   throw lastErr || new Error('Upstream MP4 muxer unavailable');
+}
+
+async function openCleanUpstreamReader(rawSrcUrl) {
+  let current;
+  try { current = new URL(String(rawSrcUrl || '').trim()); } catch (_) { return null; }
+  if (current.protocol === 'http:') current.protocol = 'https:';
+  if (isBlockedAdUrl(current)) return null;
+
+  let upstreamRes = null;
+  for (let hop = 0; hop < 4; hop++) {
+    const r = await fetch(current.href, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+        'Referer': 'https://en.loader.to/'
+      }
+    });
+    if (r.status >= 300 && r.status < 400) {
+      const loc = r.headers.get('location');
+      if (!loc) return null;
+      let nextUrl;
+      try { nextUrl = new URL(loc, current.href); } catch (_) { return null; }
+      if (nextUrl.protocol === 'http:') nextUrl.protocol = 'https:';
+      if (isBlockedAdUrl(nextUrl)) return null;
+      current = nextUrl;
+      continue;
+    }
+    upstreamRes = r;
+    break;
+  }
+
+  if (!upstreamRes || !upstreamRes.ok || !upstreamRes.body) return null;
+  const contentType = (upstreamRes.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('text/html') || contentType.includes('application/json') || contentType.includes('text/plain')) {
+    try { await upstreamRes.body.cancel(); } catch (_) {}
+    return null;
+  }
+
+  const reader = upstreamRes.body.getReader();
+  let firstChunk = null;
+  while (true) {
+    const step = await reader.read();
+    if (step.done) break;
+    if (step.value && step.value.byteLength > 0) {
+      firstChunk = step.value;
+      break;
+    }
+  }
+  if (!firstChunk || firstChunk.byteLength === 0) {
+    try { await reader.cancel(); } catch (_) {}
+    return null;
+  }
+
+  const headText = Buffer.from(firstChunk.subarray(0, Math.min(96, firstChunk.byteLength))).toString('utf8').trimStart().toLowerCase();
+  if (headText.startsWith('<!doctype') || headText.startsWith('<html') || headText.startsWith('<script') || headText.startsWith('{"error') || headText.startsWith('{"success":false')) {
+    try { await reader.cancel(); } catch (_) {}
+    return null;
+  }
+
+  return {
+    reader,
+    firstChunk,
+    contentType: contentType || 'video/mp4',
+    contentLength: upstreamRes.headers.get('content-length') || ''
+  };
 }
 
 const server = http.createServer(async (req, res) => {
@@ -216,7 +315,7 @@ const server = http.createServer(async (req, res) => {
 
   // Direct MP4 Stream Proxy Routes (Mobile / iPhone Photos & Desktop)
   if (pathname === '/__flippy_yt_ping') {
-    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', ytdlp: HAS_YTDLP });
+    return sendYtJson(res, 200, { ok: true, engine: 'flippy-v3-mp4-muxer', streamProxy: true, ytdlp: HAS_YTDLP });
   }
 
   if (pathname === '/__flippy_yt_dl') {
@@ -313,13 +412,23 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const data = await fetchUpstreamYtJson('/api/v2/download', {
-        button: '1',
+      const data = await fetchUpstreamYtJson('/ajax/download.php', {
+        copyright: '0',
         format,
-        iframe_source: 'https://flippy.studio/',
-        url: ytUrl
+        url: ytUrl,
+        api: YT_DIRECT_API_TOKEN
       });
-      return sendYtJson(res, 200, data);
+      const cleanPayload = {
+        success: Boolean(data && data.success),
+        id: data && data.id ? String(data.id) : '',
+        title: (data && data.title) || '',
+        info: (data && data.info) || null,
+        format
+      };
+      if (data && data.download_url) {
+        cleanPayload.download_url = '/__flippy_yt_stream?src=' + encodeURIComponent(String(data.download_url));
+      }
+      return sendYtJson(res, 200, cleanPayload);
     } catch (err) {
       return sendYtJson(res, 502, { success: false, error: err.message || 'Stream engine unreachable' });
     }
@@ -356,8 +465,17 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const data = await fetchUpstreamYtJson('/api/progress', { id });
-      return sendYtJson(res, 200, data);
+      const data = await fetchUpstreamYtJson('/ajax/progress.php', { id });
+      const cleanProgress = {
+        success: data && data.success !== undefined ? Number(data.success) : 0,
+        progress: data && typeof data.progress === 'number' ? data.progress : 0,
+        text: (data && data.text) || 'Processing',
+        download_url: null
+      };
+      if (data && data.download_url && Number(data.success) === 1) {
+        cleanProgress.download_url = '/__flippy_yt_stream?src=' + encodeURIComponent(String(data.download_url));
+      }
+      return sendYtJson(res, 200, cleanProgress);
     } catch (err) {
       return sendYtJson(res, 502, { success: false, error: err.message || 'Progress poll failed' });
     }
@@ -367,6 +485,10 @@ const server = http.createServer(async (req, res) => {
   if (pathname === '/__flippy_yt_stream') {
     const id = (urlObj.searchParams.get('id') || '').trim();
     const src = (urlObj.searchParams.get('src') || '').trim();
+    const ytUrl = (urlObj.searchParams.get('url') || '').trim();
+    const rawFmt = (urlObj.searchParams.get('format') || '1080').trim().toLowerCase();
+    const format = YT_ALLOWED_FORMATS.has(rawFmt) ? rawFmt : '1080';
+    const fallbackExt = (format === 'mp3' || format === 'm4a' || format === 'wav' || format === 'flac') ? format : 'mp4';
 
     if (id && ACTIVE_YT_JOBS.has(id)) {
       const job = ACTIVE_YT_JOBS.get(id);
@@ -377,7 +499,7 @@ const server = http.createServer(async (req, res) => {
       const stat = fs.statSync(job.filePath);
       const totalSize = stat.size;
       const mime = job.ext === 'mp3' ? 'audio/mpeg' : (job.ext === 'm4a' ? 'audio/mp4' : (job.ext === 'wav' ? 'audio/wav' : 'video/mp4'));
-      const filename = `flippy_video_${id}.${job.ext}`;
+      const filename = sanitizeDownloadFilename(urlObj.searchParams.get('filename') || `flippy_video_${id}.${job.ext}`, job.ext);
 
       const range = req.headers.range;
       setYtCors(res);
@@ -402,46 +524,66 @@ const server = http.createServer(async (req, res) => {
       }
     }
 
+    let opened = null;
     if (src) {
+      try { opened = await openCleanUpstreamReader(src); } catch (_) { opened = null; }
+    }
+
+    if (!opened && ytUrl && /(?:youtube\.com|youtu\.be)/i.test(ytUrl)) {
+      const compliance = await verifyYoutubeCompliance(ytUrl);
+      if (!compliance.allowed) {
+        return sendYtJson(res, 403, { success: false, error: compliance.reason });
+      }
       try {
-        const targetUrl = new URL(src);
-        if (targetUrl.protocol !== 'http:' && targetUrl.protocol !== 'https:') {
-          return sendYtJson(res, 400, { success: false, error: 'Invalid stream URL' });
-        }
-
-        const upstreamRes = await fetch(targetUrl.href, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
-            'Referer': 'https://p.savenow.to/'
-          },
-          redirect: 'follow'
+        const initData = await fetchUpstreamYtJson('/ajax/download.php', {
+          copyright: '0',
+          format,
+          url: ytUrl,
+          api: YT_DIRECT_API_TOKEN
         });
-
-        const contentType = upstreamRes.headers.get('content-type') || '';
-        if (contentType.includes('text/html')) {
-          return sendYtJson(res, 502, { success: false, error: 'Blocked upstream ad redirect' });
+        let freshSrc = initData && initData.download_url ? String(initData.download_url) : '';
+        const jobId = initData && initData.id ? String(initData.id) : '';
+        if (!freshSrc && jobId) {
+          for (let p = 0; p < 24; p++) {
+            await new Promise(r => setTimeout(r, 1100));
+            const pData = await fetchUpstreamYtJson('/ajax/progress.php', { id: jobId });
+            if (pData && pData.download_url && Number(pData.success) === 1) {
+              freshSrc = String(pData.download_url);
+              break;
+            }
+            if (pData && pData.progress >= 1000 && !pData.download_url) break;
+          }
         }
-
-        setYtCors(res);
-        res.writeHead(200, {
-          'Content-Type': contentType || 'video/mp4',
-          'Content-Disposition': 'attachment; filename="video.mp4"',
-          'Cache-Control': 'no-store'
-        });
-
-        const reader = upstreamRes.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(value);
+        if (freshSrc) {
+          opened = await openCleanUpstreamReader(freshSrc);
         }
-        return res.end();
-      } catch (e) {
-        return sendYtJson(res, 502, { success: false, error: 'Upstream stream proxy failed: ' + e.message });
+      } catch (_) {
+        opened = null;
       }
     }
 
-    return sendYtJson(res, 400, { success: false, error: 'Missing stream id or src' });
+    if (opened) {
+      const filename = sanitizeDownloadFilename(urlObj.searchParams.get('filename'), fallbackExt);
+      setYtCors(res);
+      const outHeaders = {
+        'Content-Type': opened.contentType || 'video/mp4',
+        'Content-Disposition': `attachment; filename="${filename}"`,
+        'Cache-Control': 'no-store'
+      };
+      if (opened.contentLength) outHeaders['Content-Length'] = opened.contentLength;
+      res.writeHead(200, outHeaders);
+      res.write(Buffer.from(opened.firstChunk));
+      try {
+        while (true) {
+          const { done, value } = await opened.reader.read();
+          if (done) break;
+          res.write(Buffer.from(value));
+        }
+      } catch (_) {}
+      return res.end();
+    }
+
+    return sendYtJson(res, 502, { success: false, error: 'Clean binary stream unavailable or expired' });
   }
 
   // Diagnostic Endpoint

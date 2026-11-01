@@ -151,10 +151,15 @@
 
     var readyBox = document.getElementById('ytcReadyMediaBox');
     var player = document.getElementById('ytcPreviewPlayer');
+    var directLink = document.getElementById('ytcDirectMp4Link');
     var embedWrap = document.getElementById('ytcEmbedFallbackWrap');
     var embedFrame = document.getElementById('ytcEmbedFrame');
 
     if (readyBox) readyBox.style.display = 'none';
+    if (directLink) {
+      directLink.href = '#';
+      directLink.removeAttribute('target');
+    }
     if (player) {
       player.pause();
       player.removeAttribute('src');
@@ -369,7 +374,7 @@
         clearTimeout(timer);
         if (res.ok) {
           var j = await res.json();
-          if (j && j.ok) {
+          if (j && j.ok && (base === '' || j.streamProxy === true || (j.engine && String(j.engine).indexOf('v3') !== -1))) {
             state.backendApiBase = base;
             return base;
           }
@@ -542,18 +547,62 @@
     updateUI();
   }
 
-  // Trigger standard browser file download (.mp4 / .m4a / .mp3)
-  function triggerBrowserDownload(href, filename) {
-    var a = document.createElement('a');
-    a.href = href;
-    a.download = filename;
-    a.rel = 'noopener';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+  // Allow ONLY local Blob URLs or same-origin / configured Flippy stream endpoints — NEVER external ad URLs
+  function isSafeDownloadHref(href) {
+    if (typeof href !== 'string' || !href || href === '#') return false;
+    if (href.indexOf('blob:') === 0) return true;
+    if (href.indexOf('/__flippy_yt_stream') === 0) return true;
+    if (typeof state.backendApiBase === 'string' && state.backendApiBase.length > 0) {
+      if (href.indexOf(state.backendApiBase + '/__flippy_yt_stream') === 0) return true;
+    }
+    if (window.location && window.location.origin && href.indexOf(window.location.origin + '/__flippy_yt_stream') === 0) {
+      return true;
+    }
+    return false;
   }
 
-  // Synchronous click handler for "Save Video to iPhone Photos" (Web Share API Level 2)
+  // Verify binary buffer is genuine media and not an HTML redirect or JSON error page
+  function isLikelyValidMediaChunk(uint8Chunk) {
+    if (!uint8Chunk || uint8Chunk.byteLength < 16) return false;
+    try {
+      var head = '';
+      var limit = Math.min(96, uint8Chunk.byteLength);
+      for (var i = 0; i < limit; i++) {
+        head += String.fromCharCode(uint8Chunk[i]);
+      }
+      var lower = head.replace(/^\s+/, '').toLowerCase();
+      if (
+        lower.indexOf('<!doctype') === 0 ||
+        lower.indexOf('<html') === 0 ||
+        lower.indexOf('<script') === 0 ||
+        lower.indexOf('{"error') === 0 ||
+        lower.indexOf('{"success":false') === 0
+      ) {
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  // Trigger standard browser file download (.mp4 / .m4a / .mp3) strictly from verified safe URLs
+  function triggerBrowserDownload(href, filename) {
+    if (!isSafeDownloadHref(href)) {
+      console.warn('[YTConverter] Blocked unsafe external download URL:', href);
+      return false;
+    }
+    var a = document.createElement('a');
+    a.href = href;
+    a.download = filename || 'video.mp4';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function() {
+      if (a.parentNode) a.parentNode.removeChild(a);
+    }, 120);
+    return true;
+  }
+
+  // Synchronous click handler for "Save Video to iPhone Photos" / "Save .MP4 Video"
   async function handleSaveToPhotosClick() {
     var btnLabel = document.getElementById('ytcSaveToPhotosLabel');
 
@@ -576,20 +625,22 @@
     }
 
     // Fallback on Desktop or browsers without file-sharing sheet: save the .MP4 directly
-    var targetHref = state.readyMedia.blobUrl;
-    if (targetHref) {
-      triggerBrowserDownload(targetHref, state.readyMedia.filename || 'video.mp4');
+    if (state.readyMedia.blobUrl) {
+      triggerBrowserDownload(state.readyMedia.blobUrl, state.readyMedia.filename || 'video.mp4');
       if (btnLabel) {
         btnLabel.textContent = '✓ Saved .MP4 to Downloads';
         setTimeout(function() {
           btnLabel.textContent = isIOSDevice() ? 'Save Video to iPhone Photos' : 'Save / Share .MP4 Video';
         }, 2500);
       }
-    } else if (state.readyMedia.directUrl && state.backendApiBase) {
-      var safeStream = state.readyMedia.directUrl.startsWith('http')
-        ? (state.backendApiBase + '/__flippy_yt_stream?src=' + encodeURIComponent(state.readyMedia.directUrl))
-        : (state.backendApiBase + state.readyMedia.directUrl);
-      triggerBrowserDownload(safeStream, state.readyMedia.filename || 'video.mp4');
+    } else if (state.readyMedia.directUrl && isSafeDownloadHref(state.readyMedia.directUrl)) {
+      triggerBrowserDownload(state.readyMedia.directUrl, state.readyMedia.filename || 'video.mp4');
+      if (btnLabel) {
+        btnLabel.textContent = '✓ Downloading .MP4 Stream...';
+        setTimeout(function() {
+          btnLabel.textContent = isIOSDevice() ? 'Save Video to iPhone Photos' : '⬇ Save .MP4 Video';
+        }, 2500);
+      }
     }
   }
 
@@ -645,16 +696,19 @@
       if (state.backendApiBase === false) state.backendApiBase = null;
       var apiBase = await discoverBackendBase();
 
-      if (apiBase === false) {
+      if (apiBase === false || apiBase === null) {
         activateStaticMp4Fallback(ytWatchUrl, muxFmt);
         state.isDownloading = false;
         updateUI();
         return;
       }
 
+      var apiPrefix = typeof apiBase === 'string' ? apiBase : '';
+
       // Step 1: Request real MP4 mux job
       var startRes = await fetch(
-        apiBase + '/__flippy_yt_dl?url=' + encodeURIComponent(ytWatchUrl) + '&format=' + encodeURIComponent(muxFmt)
+        apiPrefix + '/__flippy_yt_dl?url=' + encodeURIComponent(ytWatchUrl) + '&format=' + encodeURIComponent(muxFmt),
+        { cache: 'no-store' }
       );
       var startData = await startRes.json();
 
@@ -666,10 +720,10 @@
       var directDownloadUrl = startData.download_url || null;
 
       // Step 2: Poll conversion progress until MP4 muxing reaches 100%
-      var maxPolls = 45;
+      var maxPolls = 60;
       for (var pollIdx = 0; pollIdx < maxPolls && !directDownloadUrl; pollIdx++) {
-        await new Promise(function(r) { setTimeout(r, 1400); });
-        var pRes = await fetch(apiBase + '/__flippy_yt_progress?id=' + encodeURIComponent(jobId));
+        await new Promise(function(r) { setTimeout(r, pollIdx < 4 ? 900 : 1300); });
+        var pRes = await fetch(apiPrefix + '/__flippy_yt_progress?id=' + encodeURIComponent(jobId), { cache: 'no-store' });
         if (!pRes.ok) continue;
         var pData = await pRes.json();
 
@@ -693,22 +747,35 @@
         throw new Error('Timed out waiting for MP4 muxer. Try 1080p preset.');
       }
 
-      // Step 3: Buffer real .MP4 binary stream (100% ad-free & popup-free)
+      // Step 3: Route 100% of streams through Flippy's verified /__flippy_yt_stream proxy (even when apiPrefix === '')
       if (progFill) progFill.style.width = '65%';
       if (progText) progText.textContent = 'Downloading .' + outExt.toUpperCase() + ' file to device memory...';
 
-      var streamUrl = directDownloadUrl;
-      if (!streamUrl.startsWith('http')) {
-        streamUrl = apiBase + streamUrl;
-      } else if (!streamUrl.startsWith(apiBase) && apiBase) {
-        // Route third-party download URL through safe server proxy to prevent any ad redirects
-        streamUrl = apiBase + '/__flippy_yt_stream?src=' + encodeURIComponent(streamUrl);
+      var streamUrl;
+      if (directDownloadUrl.indexOf('/__flippy_yt_stream') === 0) {
+        streamUrl = apiPrefix + directDownloadUrl
+          + '&url=' + encodeURIComponent(ytWatchUrl)
+          + '&format=' + encodeURIComponent(muxFmt)
+          + '&filename=' + encodeURIComponent(finalFilename);
+      } else {
+        streamUrl = apiPrefix + '/__flippy_yt_stream?src=' + encodeURIComponent(directDownloadUrl)
+          + '&url=' + encodeURIComponent(ytWatchUrl)
+          + '&format=' + encodeURIComponent(muxFmt)
+          + '&filename=' + encodeURIComponent(finalFilename);
       }
+
+      // Reusable clean stream endpoint (mints a fresh token on-the-fly if single-use src was already consumed)
+      var reusableStreamUrl = apiPrefix + '/__flippy_yt_stream?url=' + encodeURIComponent(ytWatchUrl)
+        + '&format=' + encodeURIComponent(muxFmt)
+        + '&filename=' + encodeURIComponent(finalFilename);
 
       var mediaBlob = null;
       try {
-        var mediaRes = await fetch(streamUrl);
-        if (mediaRes.ok && mediaRes.body && typeof mediaRes.body.getReader === 'function') {
+        var mediaRes = await fetch(streamUrl, { cache: 'no-store' });
+        var respType = (mediaRes.headers.get('content-type') || '').toLowerCase();
+        var isBlockedMime = respType.indexOf('text/html') !== -1 || respType.indexOf('application/json') !== -1;
+
+        if (mediaRes.ok && !isBlockedMime && mediaRes.body && typeof mediaRes.body.getReader === 'function') {
           var contentLen = Number(mediaRes.headers.get('content-length')) || 0;
           var reader = mediaRes.body.getReader();
           var chunks = [];
@@ -717,21 +784,31 @@
           while (true) {
             var step = await reader.read();
             if (step.done) break;
-            chunks.push(step.value);
-            received += step.value.length;
-            var mb = (received / (1024 * 1024)).toFixed(1);
-            if (contentLen > 0) {
-              var dlPct = Math.round((received / contentLen) * 100);
-              if (progFill) progFill.style.width = (60 + Math.round(dlPct * 0.4)) + '%';
-              if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB (' + dlPct + '%)...';
-            } else {
-              if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB...';
+            if (step.value && step.value.byteLength > 0) {
+              chunks.push(step.value);
+              received += step.value.byteLength;
+              var mb = (received / (1024 * 1024)).toFixed(1);
+              if (contentLen > 0) {
+                var dlPct = Math.min(100, Math.round((received / contentLen) * 100));
+                if (progFill) progFill.style.width = (60 + Math.round(dlPct * 0.4)) + '%';
+                if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB (' + dlPct + '%)...';
+              } else {
+                if (progText) progText.textContent = 'Receiving .' + outExt.toUpperCase() + ': ' + mb + ' MB...';
+              }
             }
           }
-          mediaBlob = new Blob(chunks, { type: mimeType });
-        } else if (mediaRes.ok) {
+
+          if (received > 512 && chunks.length > 0 && isLikelyValidMediaChunk(chunks[0])) {
+            mediaBlob = new Blob(chunks, { type: mimeType });
+          }
+        } else if (mediaRes.ok && !isBlockedMime) {
           var rawBlob = await mediaRes.blob();
-          mediaBlob = new Blob([rawBlob], { type: mimeType });
+          if (rawBlob && rawBlob.size > 512) {
+            var headBuf = new Uint8Array(await rawBlob.slice(0, 96).arrayBuffer());
+            if (isLikelyValidMediaChunk(headBuf)) {
+              mediaBlob = new Blob([rawBlob], { type: mimeType });
+            }
+          }
         }
       } catch (_) {
         mediaBlob = null;
@@ -745,7 +822,7 @@
       var directLink = document.getElementById('ytcDirectMp4Link');
       var savePhotosLabel = document.getElementById('ytcSaveToPhotosLabel');
 
-      state.readyMedia.directUrl = streamUrl;
+      state.readyMedia.directUrl = reusableStreamUrl;
       state.readyMedia.filename = finalFilename;
       if (readyFilenameEl) readyFilenameEl.textContent = finalFilename;
 
@@ -765,10 +842,10 @@
           directLink.textContent = '⬇ Save .' + outExt.toUpperCase() + ' File';
         }
       } else {
-        // Safe same-origin stream fallback — NEVER exposes third-party ad URL to <a>
+        // Safe same-origin stream fallback — NEVER exposes third-party URLs
         if (player) player.style.display = 'none';
         if (directLink) {
-          directLink.href = streamUrl;
+          directLink.href = reusableStreamUrl;
           directLink.download = finalFilename;
           directLink.textContent = '⬇ Download .' + outExt.toUpperCase() + ' Directly';
         }
@@ -790,9 +867,8 @@
       if (usePhotosShareFirst) {
         if (progText) progText.textContent = '✓ MP4 Ready! Tap "Save Video to iPhone Photos" below → choose "Save Video".';
       } else {
-        var dlTarget = state.readyMedia.blobUrl || (streamUrl.startsWith(apiBase) ? streamUrl : null);
-        if (dlTarget) {
-          triggerBrowserDownload(dlTarget, finalFilename);
+        var dlTarget = state.readyMedia.blobUrl || reusableStreamUrl;
+        if (dlTarget && triggerBrowserDownload(dlTarget, finalFilename)) {
           if (progText) progText.textContent = '✓ Downloaded real .' + outExt.toUpperCase() + ' file (' + finalFilename + ')!';
         } else {
           if (progText) progText.textContent = '✓ Ready! Click "Save .' + outExt.toUpperCase() + ' File" below to download.';
@@ -952,6 +1028,25 @@
     var savePhotosBtn = document.getElementById('ytcSaveToPhotosBtn');
     if (savePhotosBtn) {
       savePhotosBtn.addEventListener('click', handleSaveToPhotosClick);
+    }
+
+    var directMp4Link = document.getElementById('ytcDirectMp4Link');
+    if (directMp4Link) {
+      directMp4Link.addEventListener('click', function(e) {
+        if (state.readyMedia.blobUrl) {
+          directMp4Link.href = state.readyMedia.blobUrl;
+          directMp4Link.download = state.readyMedia.filename || 'video.mp4';
+          return;
+        }
+        var currentHref = directMp4Link.getAttribute('href') || '';
+        if (!isSafeDownloadHref(currentHref)) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (state.readyMedia.directUrl && isSafeDownloadHref(state.readyMedia.directUrl)) {
+            triggerBrowserDownload(state.readyMedia.directUrl, state.readyMedia.filename || 'video.mp4');
+          }
+        }
+      });
     }
 
     var copyCliBtn = document.getElementById('ytcCopyCliBtn');

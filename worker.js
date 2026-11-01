@@ -163,17 +163,63 @@ const YT_ALLOWED_FORMATS = new Set([
 const YT_CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Accept"
+  "Access-Control-Allow-Headers": "Content-Type, Accept, Range",
+  "Access-Control-Expose-Headers": "Content-Length, Content-Disposition, Content-Type"
 };
+
+const YT_DIRECT_API_TOKEN = "dfcb6d76f2f6a9894gjkege8a4ab232222";
 
 function ytJsonResponse(status, obj) {
   return new Response(JSON.stringify(obj), {
     status,
     headers: {
       ...YT_CORS_HEADERS,
-      "Content-Type": "application/json; charset=utf-8"
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "no-store"
     }
   });
+}
+
+function sanitizeDownloadFilename(rawName, fallbackExt = "mp4") {
+  const cleaned = String(rawName || "")
+    .replace(/["\r\n<>:\\|?*\x00-\x1F]/g, "_")
+    .replace(/\s+/g, "_")
+    .slice(0, 110);
+  if (!cleaned) return `flippy_video.${fallbackExt}`;
+  if (!/\.[a-z0-9]{2,4}$/i.test(cleaned)) return `${cleaned}.${fallbackExt}`;
+  return cleaned;
+}
+
+function inferMediaMime(formatOrName) {
+  const s = String(formatOrName || "").toLowerCase();
+  if (s.endsWith(".mp3") || s === "mp3") return "audio/mpeg";
+  if (s.endsWith(".m4a") || s === "m4a" || s === "aac") return "audio/mp4";
+  if (s.endsWith(".wav") || s === "wav") return "audio/wav";
+  if (s.endsWith(".flac") || s === "flac") return "audio/flac";
+  if (s.endsWith(".opus") || s === "opus") return "audio/ogg";
+  if (s.endsWith(".webm") || s === "webm") return "video/webm";
+  return "video/mp4";
+}
+
+function isAllowedMediaStorageHost(hostname) {
+  const h = String(hostname || "").toLowerCase();
+  return (
+    h === "savenow.to" || h.endsWith(".savenow.to") ||
+    h === "lbserver.xyz" || h.endsWith(".lbserver.xyz") ||
+    h === "loader.to" || h.endsWith(".loader.to") ||
+    h === "googlevideo.com" || h.endsWith(".googlevideo.com") ||
+    h === "4kdownload.to" || h.endsWith(".4kdownload.to") ||
+    h === "y2down.cc" || h.endsWith(".y2down.cc")
+  );
+}
+
+function isBlockedAdUrl(urlObj) {
+  if (!urlObj || (urlObj.protocol !== "https:" && urlObj.protocol !== "http:")) return true;
+  const h = urlObj.hostname.toLowerCase();
+  const p = urlObj.pathname.toLowerCase();
+  if (!isAllowedMediaStorageHost(h)) return true;
+  if (p.includes("/ajax/ad") || p.includes("/ad/") || h.includes("hai8g")) return true;
+  return false;
 }
 
 async function verifyYoutubeCompliance(ytUrl) {
@@ -195,6 +241,9 @@ async function verifyYoutubeCompliance(ytUrl) {
     }
     for (const pat of YT_BLOCKED_TITLE_PATTERNS) {
       if (pat.test(title)) {
+        if (/trailer|teaser|pv|op\b|ed\b|opening|ending|ost/i.test(title) && !/full\s+(movie|episode)/i.test(title)) {
+          continue;
+        }
         return {
           allowed: false,
           reason: "Restricted Content: Title matches protected Full Movie or Anime Episode broadcast pattern."
@@ -207,6 +256,7 @@ async function verifyYoutubeCompliance(ytUrl) {
   }
 }
 
+// Uses first-party /ajax/download.php + /ajax/progress.php (returns direct storage node URLs with 0 ad redirects)
 async function fetchUpstreamYtJson(pathname, queryObj) {
   const hosts = ["https://p.savenow.to", "https://p.lbserver.xyz"];
   const qs = new URLSearchParams(queryObj).toString();
@@ -217,9 +267,9 @@ async function fetchUpstreamYtJson(pathname, queryObj) {
       const r = await fetch(`${host}${pathname}?${qs}`, {
         method: "GET",
         headers: {
-          "Origin": host,
-          "Referer": `${host}/api/button/`,
-          "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+          "Origin": "https://en.loader.to",
+          "Referer": "https://en.loader.to/",
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
           "Accept": "application/json"
         }
       });
@@ -232,6 +282,132 @@ async function fetchUpstreamYtJson(pathname, queryObj) {
     }
   }
   throw lastErr || new Error("Upstream MP4 muxer unavailable");
+}
+
+async function startCleanUpstreamJob(ytUrl, format) {
+  return await fetchUpstreamYtJson("/ajax/download.php", {
+    copyright: "0",
+    format,
+    url: ytUrl,
+    api: YT_DIRECT_API_TOKEN
+  });
+}
+
+async function pollCleanUpstreamJob(id) {
+  return await fetchUpstreamYtJson("/ajax/progress.php", { id });
+}
+
+// Opens upstream media stream with manual redirect inspection + magic-byte verification (never follows ad redirects)
+async function openCleanMediaStream(rawSrcUrl) {
+  let current;
+  try {
+    current = new URL(String(rawSrcUrl || "").trim());
+  } catch (_) {
+    return null;
+  }
+  if (current.protocol === "http:") current.protocol = "https:";
+  if (isBlockedAdUrl(current)) return null;
+
+  let streamRes = null;
+  for (let hop = 0; hop < 4; hop++) {
+    const res = await fetch(current.href, {
+      method: "GET",
+      redirect: "manual",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+        "Referer": "https://en.loader.to/",
+        "Accept": "*/*"
+      }
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      const loc = res.headers.get("location");
+      if (!loc) return null;
+      let nextUrl;
+      try {
+        nextUrl = new URL(loc, current.href);
+      } catch (_) {
+        return null;
+      }
+      if (nextUrl.protocol === "http:") nextUrl.protocol = "https:";
+      if (isBlockedAdUrl(nextUrl)) {
+        return null;
+      }
+      current = nextUrl;
+      continue;
+    }
+
+    streamRes = res;
+    break;
+  }
+
+  if (!streamRes || !streamRes.ok || !streamRes.body) return null;
+
+  const contentType = (streamRes.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("text/html") || contentType.includes("application/json") || contentType.includes("text/plain")) {
+    try { await streamRes.body.cancel(); } catch (_) {}
+    return null;
+  }
+
+  const reader = streamRes.body.getReader();
+  let firstChunk = null;
+  while (true) {
+    const step = await reader.read();
+    if (step.done) break;
+    if (step.value && step.value.byteLength > 0) {
+      firstChunk = step.value;
+      break;
+    }
+  }
+
+  if (!firstChunk || firstChunk.byteLength === 0) {
+    try { await reader.cancel(); } catch (_) {}
+    return null;
+  }
+
+  // Inspect initial bytes to guarantee binary media (reject HTML ad pages or JSON error payloads)
+  const headText = new TextDecoder("utf-8", { fatal: false })
+    .decode(firstChunk.subarray(0, Math.min(96, firstChunk.byteLength)))
+    .trimStart()
+    .toLowerCase();
+
+  if (
+    headText.startsWith("<!doctype") ||
+    headText.startsWith("<html") ||
+    headText.startsWith("<script") ||
+    headText.startsWith("{\"error") ||
+    headText.startsWith("{\"success\":false")
+  ) {
+    try { await reader.cancel(); } catch (_) {}
+    return null;
+  }
+
+  const verifiedStream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(firstChunk);
+    },
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+        } else {
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        controller.error(err);
+      }
+    },
+    async cancel() {
+      try { await reader.cancel(); } catch (_) {}
+    }
+  });
+
+  return {
+    stream: verifiedStream,
+    contentType: contentType || "video/mp4",
+    contentLength: streamRes.headers.get("content-length") || ""
+  };
 }
 
 export default {
@@ -398,7 +574,7 @@ export default {
     // If authenticated: handle Direct MP4 YT Converter routes or stream actual site assets
     if (isAuthenticated) {
       if (url.pathname === "/__flippy_yt_ping") {
-        return ytJsonResponse(200, { ok: true, engine: "flippy-v3-edge-mp4" });
+        return ytJsonResponse(200, { ok: true, engine: "flippy-v3-edge-mp4", streamProxy: true });
       }
 
       if (url.pathname === "/__flippy_yt_dl") {
@@ -416,13 +592,18 @@ export default {
         }
 
         try {
-          const data = await fetchUpstreamYtJson("/api/v2/download", {
-            button: "1",
-            format,
-            iframe_source: url.origin + "/",
-            url: ytUrl
-          });
-          return ytJsonResponse(200, data);
+          const data = await startCleanUpstreamJob(ytUrl, format);
+          const cleanPayload = {
+            success: Boolean(data && data.success),
+            id: data && data.id ? String(data.id) : "",
+            title: (data && data.title) || "",
+            info: (data && data.info) || null,
+            format
+          };
+          if (data && data.download_url) {
+            cleanPayload.download_url = "/__flippy_yt_stream?src=" + encodeURIComponent(String(data.download_url));
+          }
+          return ytJsonResponse(200, cleanPayload);
         } catch (err) {
           return ytJsonResponse(502, { success: false, error: err.message || "Upstream muxer failed" });
         }
@@ -434,47 +615,102 @@ export default {
           return ytJsonResponse(400, { success: false, error: "Missing conversion job id" });
         }
         try {
-          const data = await fetchUpstreamYtJson("/api/progress", { id });
-          return ytJsonResponse(200, data);
+          const data = await pollCleanUpstreamJob(id);
+          const cleanProgress = {
+            success: data && data.success !== undefined ? Number(data.success) : 0,
+            progress: data && typeof data.progress === "number" ? data.progress : 0,
+            text: (data && data.text) || "Processing",
+            download_url: null
+          };
+          if (data && data.download_url && Number(data.success) === 1) {
+            cleanProgress.download_url = "/__flippy_yt_stream?src=" + encodeURIComponent(String(data.download_url));
+          }
+          return ytJsonResponse(200, cleanProgress);
         } catch (err) {
           return ytJsonResponse(502, { success: false, error: err.message || "Progress poll failed" });
         }
       }
 
-      // Safe Binary Stream Endpoint (Zero Client Ad-Redirects)
+      // Safe Binary Stream Endpoint (Zero Client Ad-Redirects, Magic-Byte Verified, Single-Use Token Recovery)
       if (url.pathname === "/__flippy_yt_stream") {
         const src = (url.searchParams.get("src") || "").trim();
-        if (!src) {
-          return ytJsonResponse(400, { success: false, error: "Missing stream src" });
-        }
-        try {
-          const targetUrl = new URL(src);
-          if (targetUrl.protocol !== "http:" && targetUrl.protocol !== "https:") {
-            return ytJsonResponse(400, { success: false, error: "Invalid stream URL" });
+        const ytUrl = (url.searchParams.get("url") || "").trim();
+        const rawFmt = (url.searchParams.get("format") || "1080").trim().toLowerCase();
+        const format = YT_ALLOWED_FORMATS.has(rawFmt) ? rawFmt : "1080";
+        const ext = (format === "mp3" || format === "m4a" || format === "wav" || format === "flac") ? format : "mp4";
+        const filename = sanitizeDownloadFilename(url.searchParams.get("filename"), ext);
+
+        let opened = null;
+        if (src) {
+          try {
+            opened = await openCleanMediaStream(src);
+          } catch (_) {
+            opened = null;
           }
-          const streamRes = await fetch(targetUrl.href, {
-            headers: {
-              "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15",
-              "Referer": "https://p.savenow.to/"
-            },
-            redirect: "follow"
+        }
+
+        // If src token was missing or single-use spent, transparently mint a fresh stream on the edge
+        if (!opened && ytUrl && /(?:youtube\.com|youtu\.be)/i.test(ytUrl)) {
+          const compliance = await verifyYoutubeCompliance(ytUrl);
+          if (!compliance.allowed) {
+            return ytJsonResponse(403, { success: false, error: compliance.reason });
+          }
+          try {
+            const initData = await startCleanUpstreamJob(ytUrl, format);
+            let freshSrc = (initData && initData.download_url) ? String(initData.download_url) : "";
+            const jobId = initData && initData.id ? String(initData.id) : "";
+
+            if (!freshSrc && jobId) {
+              for (let p = 0; p < 24; p++) {
+                await new Promise((r) => setTimeout(r, 1100));
+                const pData = await pollCleanUpstreamJob(jobId);
+                if (pData && pData.download_url && Number(pData.success) === 1) {
+                  freshSrc = String(pData.download_url);
+                  break;
+                }
+                if (pData && pData.progress >= 1000 && !pData.download_url) {
+                  break;
+                }
+              }
+            }
+
+            if (freshSrc) {
+              opened = await openCleanMediaStream(freshSrc);
+            }
+          } catch (_) {
+            opened = null;
+          }
+        }
+
+        if (!opened) {
+          return ytJsonResponse(502, {
+            success: false,
+            error: "Clean binary video stream unavailable or expired. Please click Download .MP4 Video again."
           });
-          const contentType = streamRes.headers.get("content-type") || "";
-          if (contentType.includes("text/html")) {
-            return ytJsonResponse(502, { success: false, error: "Upstream ad blocked" });
-          }
-          const headers = new Headers(YT_CORS_HEADERS);
-          headers.set("Content-Type", contentType || "video/mp4");
-          headers.set("Content-Disposition", 'attachment; filename="video.mp4"');
-          headers.set("Cache-Control", "no-store");
-          return new Response(streamRes.body, { status: 200, headers });
-        } catch (e) {
-          return ytJsonResponse(502, { success: false, error: "Stream proxy error: " + e.message });
         }
+
+        const headers = new Headers(YT_CORS_HEADERS);
+        headers.set("Content-Type", inferMediaMime(filename) || opened.contentType || "video/mp4");
+        headers.set("Content-Disposition", `attachment; filename="${filename}"`);
+        headers.set("Cache-Control", "no-store");
+        if (opened.contentLength) {
+          headers.set("Content-Length", opened.contentLength);
+        }
+        return new Response(opened.stream, { status: 200, headers });
       }
 
       if (env && env.ASSETS) {
-        return await env.ASSETS.fetch(request);
+        const assetRes = await env.ASSETS.fetch(request);
+        if (url.pathname === "/" || url.pathname === "/index.html" || url.pathname === "/ytconverter.js") {
+          const freshHeaders = new Headers(assetRes.headers);
+          freshHeaders.set("Cache-Control", "no-cache, must-revalidate");
+          return new Response(assetRes.body, {
+            status: assetRes.status,
+            statusText: assetRes.statusText,
+            headers: freshHeaders
+          });
+        }
+        return assetRes;
       }
       return new Response("Assets binding not available", { status: 500 });
     }
