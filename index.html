@@ -88,6 +88,9 @@
       // Revoking a person's key only requires removing their hash entry below.
       // =========================================================================
       var AUTHORIZED_KEYS = {
+        // Master Admin Key: "FLIPPY-ADMIN" (Infinite multi-device access)
+        "f07560829fddd2b3e7141a615231682c193bbb6d722789334ea96a232f71d17d": { user: "Admin", role: "admin", maxDevices: Infinity },
+
         // User Key 1: "FLIPPY-USER-KINGDOM"
         "33ad58fde95c763e2062908abab3ac5dcdaf2d838527997cf382dd9d4e59af5d": { user: "Kingdom", role: "member" },
 
@@ -1499,17 +1502,17 @@
             <button class="ph-btn ph-btn-primary" id="ytcAnalyzeBtn" type="button" style="white-space: nowrap; padding: 0 14px;">Analyze Link</button>
           </div>
 
-          <!-- Quick Test Presets to Verify Free Streams (incl. Anime Twixtors) vs Paid Store Videos -->
+          <!-- Quick Test Presets (All YouTube Streams Supported) -->
           <div class="xg-prop-group">
             <div class="xg-prop-group-title">
-              <span>Stream Verification Presets</span>
-              <span style="font-size: 10px; color: var(--text-3);">Instant Gate Check</span>
+              <span>Stream Quick Presets</span>
+              <span style="font-size: 10px; color: var(--text-3);">Instant Sample Check</span>
             </div>
             <div class="xg-quick-pills">
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Big Buck Bunny 60fps 4K - Blender Open Movie" data-author="Blender Foundation">✓ Open 4K60 Sample (Allowed)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw" data-title="Gojo vs Sukuna 4K 60FPS Anime Twixtor Scenepack" data-author="Twixtor Vault">✓ Anime Twixtor 4K60 (Allowed)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Jujutsu Kaisen Season 2 - Shibuya Clip [1080p60]" data-author="Crunchyroll">✓ Anime Channel Clip (Allowed)</button>
-              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=paid_movie1" data-title="Spider-Man: Across the Spider-Verse [Buy or Rent]" data-author="YouTube Movies &amp; TV">✕ Paid Store Movie (Requires Purchase)</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Big Buck Bunny 60fps 4K - Blender Open Movie" data-author="Blender Foundation">✓ Open 4K60 Sample</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=jNQXAC9IVRw" data-title="Gojo vs Sukuna 4K 60FPS Anime Twixtor Scenepack" data-author="Twixtor Vault">✓ Anime Twixtor 4K60</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=aqz-KE-bpKQ" data-title="Jujutsu Kaisen Season 2 - Shibuya Clip [1080p60]" data-author="Crunchyroll">✓ Anime Channel Clip</button>
+              <button type="button" class="xg-quick-pill ytc-test-preset" data-url="https://www.youtube.com/watch?v=paid_movie1" data-title="Spider-Man: Across the Spider-Verse [Buy or Rent]" data-author="YouTube Movies &amp; TV">✓ Movie / Store Video (Unlocked)</button>
             </div>
           </div>
 
@@ -1524,11 +1527,11 @@
             </div>
           </div>
 
-          <!-- Live Paywall / Purchase Gate Readout -->
+          <!-- Live Stream Status Readout -->
           <div class="ytc-compliance-box">
             <span class="ytc-compliance-badge idle" id="ytcComplianceBadge">AWAITING LINK</span>
-            <div class="ytc-compliance-reason" id="ytcComplianceReason">Paste any YouTube link (including anime twixtors, edits &amp; clips) to verify stream availability.</div>
-            <div class="ytc-compliance-rule" id="ytcComplianceRule">POLICY: FREE YOUTUBE STREAMS ALLOWED · PAID / BUY-OR-RENT VIDEOS BLOCKED</div>
+            <div class="ytc-compliance-reason" id="ytcComplianceReason">Paste any YouTube link (paid, rentals, movies, anime twixtors &amp; clips supported).</div>
+            <div class="ytc-compliance-rule" id="ytcComplianceRule">POLICY: ALL YOUTUBE VIDEOS UNRESTRICTED · EXPORT READY</div>
           </div>
         </div>
 
@@ -1706,25 +1709,21 @@
           </details>
         </div>
 
-        <!-- Column 3: Paid / Purchase-Required Filter & Session Queue -->
+        <!-- Column 3: Stream Queue & Preset Manager -->
         <div class="ytc-card">
           <div class="xmlglsl-card-title">
-            <span>03 · Purchase Gate &amp; Session Queue</span>
-            <span class="tag">Paywall Check</span>
+            <span>03 · Conversion Stream Queue</span>
+            <span class="tag">Active Queue</span>
           </div>
 
           <div class="xg-prop-group">
             <div class="xg-prop-group-title">
-              <span>Paid / Buy-or-Rent Storefronts Blocked</span>
+              <span>Universal Stream Importer</span>
             </div>
             <div style="font-size: 11px; color: var(--text-2); line-height: 1.4;">
-              All free YouTube videos — including anime twixtors, scenepacks, AMVs, and episodes — are unlocked. Downloads are only blocked when a link requires purchase or rental on YouTube.
+              All YouTube media — paid, rentals, movies, anime twixtors, scenepacks, and edits — export directly to .MP4 with 0 popups and 0 redirects.
             </div>
-            <div class="ytc-blocked-tags" id="ytcBlockedChannelsTags"></div>
-            <div style="display: flex; gap: 6px; margin-top: 4px;">
-              <input type="text" id="ytcCustomBlockedInput" placeholder="Add custom blocked channel..." style="flex: 1; background: var(--bg-panel); border: 1px solid var(--line-mid); color: var(--text-1); font-size: 11px; padding: 5px 8px; border-radius: var(--r-xs);">
-              <button class="ph-btn" id="ytcAddBlockedChannelBtn" type="button" style="font-size: 11px; padding: 4px 10px;">+ Block</button>
-            </div>
+            <div class="ytc-blocked-tags" id="ytcBlockedChannelsTags" style="display: none;"></div>
           </div>
 
           <div class="xg-prop-group" style="flex: 1;">
@@ -2077,7 +2076,7 @@
     </nav>
   </div>
 
-  <script src="ytconverter.js?v=5.4"></script>
+  <script src="ytconverter.js?v=5.8"></script>
   <script src="app.js?v=5.4"></script>
   <script src="fx.js?v=5.4"></script>
 </body>

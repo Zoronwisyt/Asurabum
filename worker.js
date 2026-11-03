@@ -6,6 +6,8 @@
 const DEFAULT_SECRET = "FLIPPY_SECRET_SALT_2026_9b83f0c1";
 
 const AUTHORIZED_KEYS = {
+  // Admin: FLIPPY-ADMIN (Infinite multi-device master key)
+  "f07560829fddd2b3e7141a615231682c193bbb6d722789334ea96a232f71d17d": { user: "Admin", role: "admin", maxDevices: Infinity },
   // Kingdom: FLIPPY-USER-KINGDOM
   "33ad58fde95c763e2062908abab3ac5dcdaf2d838527997cf382dd9d4e59af5d": { user: "Kingdom", role: "member", maxDevices: 1 },
   // CJ: FLIPPY-USER-CJ
@@ -132,18 +134,8 @@ function parseCookies(header) {
   return map;
 }
 
-const YT_BLOCKED_CHANNELS = [
-  "youtube movies",
-  "youtube movies & tv",
-  "youtube primetime",
-  "google play movies & tv",
-  "movies & shows"
-];
-
-const YT_BLOCKED_TITLE_PATTERNS = [
-  /\b(?:buy\s+or\s+rent|rent\s+or\s+buy)\b/i,
-  /\b(?:requires\s+purchase|purchase\s+required|paid\s+rental)\b/i
-];
+const YT_BLOCKED_CHANNELS = [];
+const YT_BLOCKED_TITLE_PATTERNS = [];
 
 const YT_ALLOWED_FORMATS = new Set([
   "4k", "1440", "1080", "720", "480", "360",
@@ -174,29 +166,7 @@ async function verifyYoutubeCompliance(ytUrl) {
     const r = await fetch(oembedUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
     if (!r.ok) return { allowed: true };
     const meta = await r.json();
-    const author = String(meta.author_name || "").toLowerCase().trim();
-    const title = String(meta.title || "").trim();
-
-    for (const ch of YT_BLOCKED_CHANNELS) {
-      if (author === ch || author.includes(ch)) {
-        return {
-          allowed: false,
-          reason: `Blocked: "${meta.author_name}" is a paid YouTube storefront that requires buying or renting this video.`
-        };
-      }
-    }
-    for (const pat of YT_BLOCKED_TITLE_PATTERNS) {
-      if (pat.test(title)) {
-        if (/trailer|teaser|preview|clip/i.test(title)) {
-          continue;
-        }
-        return {
-          allowed: false,
-          reason: "Blocked: This video is marked as Buy or Rent and requires purchase on YouTube."
-        };
-      }
-    }
-    return { allowed: true };
+    return { allowed: true, meta };
   } catch (_) {
     return { allowed: true };
   }
@@ -483,14 +453,8 @@ async function resolveViaCobalt(ytUrl, format) {
         };
       }
       const errCode = (j.error && j.error.code) ? String(j.error.code) : "";
-      if (/paid|purchase|rent|member/i.test(errCode)) {
-        const paidErr = new Error("Blocked: This video requires purchase or rental on YouTube.");
-        paidErr.isPaid = true;
-        throw paidErr;
-      }
       throw new Error(errCode || "Cobalt returned no stream");
     } catch (err) {
-      if (err && err.isPaid) throw err;
       lastErr = err;
     }
   }
