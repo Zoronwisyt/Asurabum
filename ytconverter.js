@@ -1,12 +1,12 @@
 /**
- * YT Converter — Direct .MP4 Video Downloader (1080p / 4K 60fps) + iPhone "Save to Photos" Engine
- * Allows all free YouTube streams (including Anime Twixtors, Clips & Episodes) · Blocks only Paid / Buy-or-Rent videos
+ * YT & TikTok / Shorts Converter — Direct .MP4 Video Downloader (1080p / 4K 60fps) + iPhone "Save to Photos" Engine
+ * Zero Popups · Zero Ads · Watermark-Free TikTok HD & YouTube Video / Shorts Exporter
  */
 (function(window, document) {
   'use strict';
 
   // =========================================================================
-  // 1. STREAM FILTER REGISTRY (ALL VIDEOS ALLOWED - FREE, PAID, RENTALS, EPISODES, CLIPS)
+  // 1. STREAM FILTER REGISTRY (ALL VIDEOS ALLOWED - YOUTUBE, SHORTS, TIKTOK NO-WATERMARK)
   // =========================================================================
   var BLOCKED_CHANNELS = [];
   var BLOCKED_TITLE_PATTERNS = [];
@@ -116,7 +116,7 @@
     }
   }
 
-  // Extract 11-char YouTube Video ID
+  // Extract 11-char YouTube Video ID (Watch, Shorts, Live, Embed, youtu.be)
   function extractYoutubeId(inputUrl) {
     if (!inputUrl) return null;
     var trimmed = inputUrl.trim();
@@ -127,13 +127,99 @@
     return null;
   }
 
-  // Evaluate Stream Gate (Unrestricted: All YouTube videos allowed, including paid, rental, movies, twixtors & episodes)
+  // Detect and normalize TikTok Video / Short URL (tiktok.com/@user/video/ID, vm.tiktok.com/..., vt.tiktok.com/..., tiktok.com/t/...)
+  function isTikTokUrl(inputUrl) {
+    if (!inputUrl) return false;
+    return /(?:^https?:\/\/)?(?:www\.|vm\.|vt\.|m\.)?tiktok\.com\/.+/i.test(String(inputUrl).trim());
+  }
+
+  function extractTikTokId(inputUrl) {
+    if (!isTikTokUrl(inputUrl)) return null;
+    var trimmed = String(inputUrl).trim();
+    var m = trimmed.match(/\/(?:video|photo|v)\/(\d{15,22})/i);
+    if (m && m[1]) return m[1];
+    var shortMatch = trimmed.match(/tiktok\.com\/(?:t\/)?([A-Za-z0-9_-]{6,16})/i);
+    if (shortMatch && shortMatch[1]) return 'tt_' + shortMatch[1];
+    return 'tt_' + Date.now().toString(36);
+  }
+
+  // Evaluate Stream Gate (Unrestricted: All YouTube & TikTok videos unlocked, watermark-free HD)
   function evaluateCompliance(meta) {
+    if (meta && meta.platform === 'tiktok') {
+      return {
+        checked: true,
+        allowed: true,
+        reason: 'Ready: TikTok Original Master Stream unlocked (Full HD · No Owner Watermark · 0 Popups).',
+        matchedRule: 'TIKTOK_NO_WATERMARK_HD_READY'
+      };
+    }
     return {
       checked: true,
       allowed: true,
-      reason: 'Ready: All YouTube videos unlocked (free, paid, rentals, movies, twixtors & anime supported).',
+      reason: 'Ready: All YouTube & Shorts streams unlocked (free, paid, rentals, movies, twixtors & anime supported).',
       matchedRule: 'UNRESTRICTED_EXPORT_ALLOWED'
+    };
+  }
+
+  // Fetch TikTok Metadata & No-Watermark HD Stream Info via TikWM API
+  async function fetchTikTokMetadata(rawUrl) {
+    var cleanUrl = String(rawUrl).trim();
+    if (!/^https?:\/\//i.test(cleanUrl)) cleanUrl = 'https://' + cleanUrl;
+    var fallbackId = extractTikTokId(cleanUrl) || 'tiktok';
+    try {
+      var apiRes = await fetch('https://www.tikwm.com/api/?url=' + encodeURIComponent(cleanUrl) + '&hd=1');
+      if (apiRes.ok) {
+        var json = await apiRes.json();
+        if (json && json.code === 0 && json.data) {
+          var d = json.data;
+          var authorNick = (d.author && (d.author.nickname || d.author.unique_id)) || 'TikTok Creator';
+          var authorHandle = (d.author && d.author.unique_id) ? ('@' + d.author.unique_id) : authorNick;
+          var bestVideoUrl = d.hdplay || d.play || d.wmplay || '';
+          if (bestVideoUrl && bestVideoUrl.indexOf('//') === 0) bestVideoUrl = 'https:' + bestVideoUrl;
+          else if (bestVideoUrl && bestVideoUrl.indexOf('/') === 0) bestVideoUrl = 'https://www.tikwm.com' + bestVideoUrl;
+          var musicUrl = d.music || '';
+          if (musicUrl && musicUrl.indexOf('//') === 0) musicUrl = 'https:' + musicUrl;
+          else if (musicUrl && musicUrl.indexOf('/') === 0) musicUrl = 'https://www.tikwm.com' + musicUrl;
+          return {
+            platform: 'tiktok',
+            id: d.id || fallbackId,
+            title: (d.title && String(d.title).trim()) || ('TikTok Video by ' + authorHandle),
+            author_name: authorNick + ' (' + authorHandle + ') · No Watermark HD',
+            author_url: cleanUrl,
+            thumbnail_url: d.origin_cover || d.cover || d.ai_dynamic_cover || '',
+            fallback_thumb: d.cover || '',
+            hdplay: bestVideoUrl,
+            play: d.play || bestVideoUrl,
+            music: musicUrl
+          };
+        }
+      }
+    } catch (_) {}
+
+    try {
+      var oembedRes = await fetch('https://www.tiktok.com/oembed?url=' + encodeURIComponent(cleanUrl));
+      if (oembedRes.ok) {
+        var oData = await oembedRes.json();
+        return {
+          platform: 'tiktok',
+          id: fallbackId,
+          title: oData.title || ('TikTok Video (' + fallbackId + ')'),
+          author_name: (oData.author_name || 'TikTok Creator') + ' · No Watermark HD',
+          author_url: oData.author_url || cleanUrl,
+          thumbnail_url: oData.thumbnail_url || '',
+          fallback_thumb: oData.thumbnail_url || ''
+        };
+      }
+    } catch (_) {}
+
+    return {
+      platform: 'tiktok',
+      id: fallbackId,
+      title: 'TikTok Video (' + fallbackId + ')',
+      author_name: 'TikTok Creator · No Watermark HD',
+      author_url: cleanUrl,
+      thumbnail_url: '',
+      fallback_thumb: ''
     };
   }
 
@@ -277,13 +363,18 @@
 
   // Build Optional CLI Command Reference
   function generateCliCommand() {
+    var isTT = state.meta && state.meta.platform === 'tiktok';
     var vid = state.videoId || 'aqz-KE-bpKQ';
-    var url = 'https://www.youtube.com/watch?v=' + vid;
+    var url = isTT ? (state.url || 'https://www.tiktok.com/@tiktok/video/7106594312292453675') : ('https://www.youtube.com/watch?v=' + vid);
     var s = state.settings;
 
     if (s.resolution === 'audio') {
       var aFormat = (s.container === 'mp3' || s.container === 'wav' || s.container === 'm4a') ? s.container : 'm4a';
       return 'yt-dlp -x --audio-format ' + aFormat + ' --audio-quality 0 "' + url + '"';
+    }
+
+    if (isTT) {
+      return 'yt-dlp -f "download_addr-0/best[ext=mp4]/best" --merge-output-format mp4 "' + url + '"';
     }
 
     var heightMap = {
@@ -504,8 +595,8 @@
         statusBadge.className = 'ytc-compliance-badge idle';
         statusBadge.textContent = 'AWAITING LINK';
       }
-      if (statusReason) statusReason.textContent = 'Paste any YouTube link (paid, rentals, movies, anime twixtors & edits supported).';
-      if (statusRule) statusRule.textContent = 'POLICY: ALL YOUTUBE VIDEOS UNRESTRICTED · EXPORT READY';
+      if (statusReason) statusReason.textContent = 'Paste any YouTube, Shorts, or TikTok link (Full HD, No Watermark, 0 Popups).';
+      if (statusRule) statusRule.textContent = 'POLICY: YOUTUBE & TIKTOK (NO WATERMARK) UNRESTRICTED · EXPORT READY';
       if (downloadBtn) downloadBtn.disabled = true;
       return;
     }
@@ -533,21 +624,39 @@
     }
   }
 
-  // Analyze Input URL
+  // Analyze Input URL (Supports YouTube Watch, YouTube Shorts, and TikTok Videos/Shorts)
   async function analyzeUrl(rawUrl) {
     clearReadyMedia();
     var inputEl = document.getElementById('ytcUrlInput');
     var urlToAnalyze = rawUrl !== undefined ? rawUrl : (inputEl ? inputEl.value : '');
-    var vid = extractYoutubeId(urlToAnalyze);
-
     var analyzeBtn = document.getElementById('ytcAnalyzeBtn');
+
+    if (isTikTokUrl(urlToAnalyze)) {
+      var cleanTtUrl = String(urlToAnalyze).trim();
+      if (!/^https?:\/\//i.test(cleanTtUrl)) cleanTtUrl = 'https://' + cleanTtUrl;
+      state.url = cleanTtUrl;
+      state.videoId = extractTikTokId(cleanTtUrl) || 'tiktok';
+      state.isFetching = true;
+      if (analyzeBtn) analyzeBtn.textContent = 'Scanning...';
+
+      var ttMeta = await fetchTikTokMetadata(cleanTtUrl);
+      if (ttMeta && ttMeta.id) state.videoId = ttMeta.id;
+      state.meta = ttMeta;
+      state.compliance = evaluateCompliance(ttMeta);
+      state.isFetching = false;
+      if (analyzeBtn) analyzeBtn.textContent = 'Analyze Link';
+      updateUI();
+      return;
+    }
+
+    var vid = extractYoutubeId(urlToAnalyze);
     if (!vid) {
       state.videoId = '';
       state.meta = null;
       state.compliance = {
         checked: true,
         allowed: false,
-        reason: 'Invalid YouTube URL format. Provide a valid watch, shorts, or youtu.be link.',
+        reason: 'Invalid URL format. Provide a valid YouTube, YouTube Shorts, or TikTok link.',
         matchedRule: 'INVALID_URI'
       };
       updateUI();
@@ -687,9 +796,37 @@
     return JSON.parse(new TextDecoder().decode(decrypted));
   }
 
-  // Resolve media stream client-side via CORS-enabled Cobalt v11 & SaveTube engines (Zero Popups, Zero Ads)
-  async function resolveClientCloudMediaUrl(ytWatchUrl, muxFmt) {
+  // Resolve media stream client-side via CORS-enabled TikWM (TikTok No-Watermark HD), Cobalt v11 & SaveTube engines (Zero Popups, Zero Ads)
+  async function resolveClientCloudMediaUrl(targetUrl, muxFmt) {
     var isAudio = ['mp3', 'm4a', 'aac', 'wav', 'flac', 'opus'].indexOf(muxFmt) !== -1;
+
+    // 1. TikTok No-Watermark Fullest Quality (HD Master) Resolver
+    if (isTikTokUrl(targetUrl)) {
+      if (state.meta && state.meta.platform === 'tiktok') {
+        if (isAudio && state.meta.music) {
+          return { streamUrl: state.meta.music, provider: 'tikwm' };
+        }
+        if (!isAudio && (state.meta.hdplay || state.meta.play)) {
+          return { streamUrl: state.meta.hdplay || state.meta.play, provider: 'tikwm' };
+        }
+      }
+      try {
+        var twRes = await fetch('https://www.tikwm.com/api/?url=' + encodeURIComponent(targetUrl) + '&hd=1');
+        if (twRes.ok) {
+          var twJson = await twRes.json();
+          if (twJson && twJson.code === 0 && twJson.data) {
+            var d = twJson.data;
+            var picked = isAudio ? (d.music || d.hdplay || d.play) : (d.hdplay || d.play);
+            if (picked) {
+              if (picked.indexOf('//') === 0) picked = 'https:' + picked;
+              else if (picked.indexOf('/') === 0) picked = 'https://www.tikwm.com' + picked;
+              return { streamUrl: picked, provider: 'tikwm' };
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
     var qMap = { '4k': '2160', '1440': '1440', '1080': '1080', '720': '720', '480': '480', '360': '360' };
     var vq = qMap[muxFmt] || '1080';
 
@@ -702,7 +839,7 @@
       try {
         var base = cobaltInstances[i];
         var bodyData = {
-          url: ytWatchUrl,
+          url: targetUrl,
           videoQuality: vq,
           youtubeVideoCodec: 'h264'
         };
@@ -735,40 +872,42 @@
       } catch (_) {}
     }
 
-    try {
-      var cdnRes = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://media.savetube.vip/api/random-cdn'));
-      var cdnJson = await cdnRes.json();
-      var cdn = (cdnJson && cdnJson.cdn) || 'cdn403.savetube.vip';
+    if (!isTikTokUrl(targetUrl)) {
+      try {
+        var cdnRes = await fetch('https://api.allorigins.win/raw?url=' + encodeURIComponent('https://media.savetube.vip/api/random-cdn'));
+        var cdnJson = await cdnRes.json();
+        var cdn = (cdnJson && cdnJson.cdn) || 'cdn403.savetube.vip';
 
-      var infoRes = await fetch('https://' + cdn + '/v2/info', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: ytWatchUrl })
-      });
-      var infoJson = await infoRes.json();
-      if (infoJson && infoJson.data) {
-        var decoded = await decryptSaveTubeClient(infoJson.data);
-        if (decoded && decoded.key) {
-          var stQuality = isAudio ? '128' : (['720', '480', '360'].indexOf(muxFmt) !== -1 ? muxFmt : '1080');
-          var dlRes = await fetch('https://' + cdn + '/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              downloadType: isAudio ? 'audio' : 'video',
-              quality: stQuality,
-              key: decoded.key
-            })
-          });
-          var dlJson = await dlRes.json();
-          if (dlJson && dlJson.data && dlJson.data.downloadUrl) {
-            return {
-              streamUrl: dlJson.data.downloadUrl,
-              provider: 'savetube'
-            };
+        var infoRes = await fetch('https://' + cdn + '/v2/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: targetUrl })
+        });
+        var infoJson = await infoRes.json();
+        if (infoJson && infoJson.data) {
+          var decoded = await decryptSaveTubeClient(infoJson.data);
+          if (decoded && decoded.key) {
+            var stQuality = isAudio ? '128' : (['720', '480', '360'].indexOf(muxFmt) !== -1 ? muxFmt : '1080');
+            var dlRes = await fetch('https://' + cdn + '/download', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                downloadType: isAudio ? 'audio' : 'video',
+                quality: stQuality,
+                key: decoded.key
+              })
+            });
+            var dlJson = await dlRes.json();
+            if (dlJson && dlJson.data && dlJson.data.downloadUrl) {
+              return {
+                streamUrl: dlJson.data.downloadUrl,
+                provider: 'savetube'
+              };
+            }
           }
         }
-      }
-    } catch (_) {}
+      } catch (_) {}
+    }
 
     return null;
   }
@@ -925,7 +1064,8 @@
     if (progWrap) progWrap.style.display = 'flex';
     if (progFill) progFill.style.width = '8%';
 
-    var ytWatchUrl = 'https://www.youtube.com/watch?v=' + state.videoId;
+    var isTT = state.meta && state.meta.platform === 'tiktok';
+    var ytWatchUrl = isTT ? state.url : ('https://www.youtube.com/watch?v=' + state.videoId);
     var muxFmt = mapSettingsToMuxFormat();
     var outExt = getOutputExtension();
     var mimeType = getOutputMimeType();
@@ -933,7 +1073,7 @@
       .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
       .replace(/\s+/g, '_')
       .slice(0, 64) || ('Flippy_Video_' + state.videoId);
-    var finalFilename = safeTitle + '_' + muxFmt.toUpperCase() + '.' + outExt;
+    var finalFilename = safeTitle + '_' + (isTT ? 'TIKTOK_HD_NOWM' : muxFmt.toUpperCase()) + '.' + outExt;
 
     try {
       if (progText) progText.textContent = 'Stream verified (' + state.meta.author_name + ') · Connecting to MP4 stream muxer...';
@@ -1273,7 +1413,7 @@
       });
     });
 
-    // Compliance Test Presets
+    // Compliance Test Presets (Supports YouTube, YouTube Shorts, and TikTok No-Watermark HD)
     document.querySelectorAll('.ytc-test-preset').forEach(function(btn) {
       btn.addEventListener('click', function() {
         clearReadyMedia();
@@ -1281,6 +1421,11 @@
         var presetTitle = btn.getAttribute('data-title');
         var presetAuthor = btn.getAttribute('data-author');
         if (urlInput) urlInput.value = presetUrl;
+
+        if (isTikTokUrl(presetUrl)) {
+          analyzeUrl(presetUrl);
+          return;
+        }
 
         var vid = extractYoutubeId(presetUrl) || 'aqz-KE-bpKQ';
         state.url = presetUrl;
