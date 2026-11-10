@@ -684,16 +684,37 @@
             const projD = rectWidth * cosA + rectHeight * sinA || 1;
             const wipeOverscan = isBoxV2Mode ? 0 : (WIPE_SEAM_OVERSCAN_PX / projD);
 
-            const sliceWipeStart = Math.max(0, normStart - wipeOverscan);
-            const sliceWipeEnd = Math.min(1, normEnd + wipeOverscan);
-
-            // Distance from solid center along the angle vector
-            const sliceMidNorm = (normStart + normEnd) / 2 - 0.5;
-            const sliceMidDist = sliceMidNorm * projD;
-            const sliceCenterOffsetX = sliceMidDist * Math.cos(rad);
-            const sliceCenterOffsetY = sliceMidDist * Math.sin(rad);
-
             const isDiag = (effectiveWipeAngle % 90 !== 0);
+
+            const wipeXOverscan = isBoxV2Mode ? 0 : (WIPE_SEAM_OVERSCAN_PX / rectWidth);
+            const wipeYOverscan = isBoxV2Mode ? 0 : (WIPE_SEAM_OVERSCAN_PX / rectHeight);
+
+            const sliceWipeXStart = Math.max(0, layerXStart - (layerXStart > 0 ? wipeXOverscan : 0));
+            const sliceWipeXEnd = Math.min(1, layerXEnd + (layerXEnd < 1 ? wipeXOverscan : 0));
+            const sliceWipeYStart = Math.max(0, layerYStart - (layerYStart > 0 ? wipeYOverscan : 0));
+            const sliceWipeYEnd = Math.min(1, layerYEnd + (layerYEnd < 1 ? wipeYOverscan : 0));
+
+            const sliceWipeStart = isDiag
+              ? Math.max(0, normStart - wipeOverscan)
+              : (effectiveWipeAngle === 90 ? sliceWipeYStart : sliceWipeXStart);
+            const sliceWipeEnd = isDiag
+              ? Math.min(1, normEnd + wipeOverscan)
+              : (effectiveWipeAngle === 90 ? sliceWipeYEnd : sliceWipeXEnd);
+
+            // Centroid offset from solid center
+            let sliceCenterOffsetX = 0;
+            let sliceCenterOffsetY = 0;
+            if (isDiag) {
+              const sliceMidNorm = (normStart + normEnd) / 2 - 0.5;
+              const sliceMidDist = sliceMidNorm * projD;
+              sliceCenterOffsetX = sliceMidDist * Math.cos(rad);
+              sliceCenterOffsetY = sliceMidDist * Math.sin(rad);
+            } else {
+              const sliceMidX = (layerXStart + layerXEnd) / 2;
+              const sliceMidY = (layerYStart + layerYEnd) / 2;
+              sliceCenterOffsetX = (sliceMidX - 0.5) * rectWidth;
+              sliceCenterOffsetY = (sliceMidY - 0.5) * rectHeight;
+            }
 
             // Auto-fix pivot for Wipe mode slices across ANY split direction & ANY section stack:
             // Since the entire solid is centered on screen in Wipe mode, each slice's visible strip
@@ -721,13 +742,17 @@
               wipeAngle: effectiveWipeAngle,
               wipeStart: sliceWipeStart,
               wipeEnd: sliceWipeEnd,
-              wipeXStart: (!isDiag && effectiveWipeAngle === 0) ? sliceWipeStart : 0,
-              wipeXEnd: (!isDiag && effectiveWipeAngle === 0) ? sliceWipeEnd : 1,
-              wipeYStart: (!isDiag && effectiveWipeAngle === 90) ? sliceWipeStart : 0,
-              wipeYEnd: (!isDiag && effectiveWipeAngle === 90) ? sliceWipeEnd : 1,
+              wipeXStart: isDiag ? 0 : sliceWipeXStart,
+              wipeXEnd: isDiag ? 1 : sliceWipeXEnd,
+              wipeYStart: isDiag ? 0 : sliceWipeYStart,
+              wipeYEnd: isDiag ? 1 : sliceWipeYEnd,
+              layerXStart,
+              layerXEnd,
+              layerYStart,
+              layerYEnd,
               isDiagonal: isDiag,
               projSpanD: projD,
-              bandWidth: projD * (normEnd - normStart),
+              bandWidth: isDiag ? (projD * (normEnd - normStart)) : (effectiveWipeAngle === 90 ? rectHeight * (layerYEnd - layerYStart) : rectWidth * (layerXEnd - layerXStart)),
               sliceCenterX: (state.projectWidth / 2) + sliceCenterOffsetX,
               sliceCenterY: (state.projectHeight / 2) + sliceCenterOffsetY,
               sliceCenterOffsetX: sliceCenterOffsetX,
@@ -1062,40 +1087,77 @@
         const cx = currentLocX * scaleF;
         const cy = currentLocY * scaleF;
 
-        const angle = layer.wipeAngle !== undefined ? layer.wipeAngle : (state.splitDirection === 'horizontal' ? 90 : 0);
-        const thetaRad = (angle * Math.PI) / 180;
-        const startVal = layer.wipeStart !== undefined ? layer.wipeStart : (angle === 90 ? layer.wipeYStart : layer.wipeXStart);
-        const endVal = layer.wipeEnd !== undefined ? layer.wipeEnd : (angle === 90 ? layer.wipeYEnd : layer.wipeXEnd);
-
-        const cosA = Math.abs(Math.cos(thetaRad));
-        const sinA = Math.abs(Math.sin(thetaRad));
-        const projD = solidW * cosA + solidH * sinA || 1;
-
-        const d1 = (startVal - 0.5) * projD;
-        const d2 = (endVal - 0.5) * projD;
-        const R = Math.hypot(solidW, solidH) * 1.5;
-
         ctx.save();
-        ctx.translate(cx, cy);
-        ctx.rotate(thetaRad);
-        ctx.beginPath();
-        ctx.rect(d1, -R, Math.max(0.1, d2 - d1), R * 2);
-        ctx.clip();
-        ctx.rotate(-thetaRad);
-        ctx.translate(-cx, -cy);
 
-        ctx.fillStyle = getLayerColor(idx, layers.length, layer.sectionIdx, state.sectionCount);
-        ctx.fillRect(solidLeft, solidTop, solidW, solidH);
+        if (layer.isDiagonal) {
+          const angle = layer.wipeAngle !== undefined ? layer.wipeAngle : 45;
+          const thetaRad = (angle * Math.PI) / 180;
+          const cosA = Math.abs(Math.cos(thetaRad));
+          const sinA = Math.abs(Math.sin(thetaRad));
+          const projD = solidW * cosA + solidH * sinA || 1;
+          const startVal = layer.wipeStart !== undefined ? layer.wipeStart : 0;
+          const endVal = layer.wipeEnd !== undefined ? layer.wipeEnd : 1;
+          const d1 = (startVal - 0.5) * projD;
+          const d2 = (endVal - 0.5) * projD;
+          const R = Math.hypot(solidW, solidH) * 1.5;
 
-        const midD = (d1 + d2) / 2;
-        const labelX = cx + midD * Math.cos(thetaRad);
-        const labelY = cy + midD * Math.sin(thetaRad);
+          const hasXBound = (layer.wipeXStart !== undefined && (layer.wipeXStart > 0.0001 || layer.wipeXEnd < 0.9999));
+          const hasYBound = (layer.wipeYStart !== undefined && (layer.wipeYStart > 0.0001 || layer.wipeYEnd < 0.9999));
+          if (hasXBound || hasYBound) {
+            const clipX1 = solidLeft + (layer.wipeXStart !== undefined ? layer.wipeXStart : 0) * solidW;
+            const clipX2 = solidLeft + (layer.wipeXEnd !== undefined ? layer.wipeXEnd : 1) * solidW;
+            const clipY1 = solidTop + (layer.wipeYStart !== undefined ? layer.wipeYStart : 0) * solidH;
+            const clipY2 = solidTop + (layer.wipeYEnd !== undefined ? layer.wipeYEnd : 1) * solidH;
+            ctx.beginPath();
+            ctx.rect(clipX1, clipY1, Math.max(0.1, clipX2 - clipX1), Math.max(0.1, clipY2 - clipY1));
+            ctx.clip();
+          }
 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-        ctx.font = `${Math.max(9, 12 * scaleF * 3)}px Inter, sans-serif`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(`C${layer.index}`, labelX, labelY);
+          ctx.translate(cx, cy);
+          ctx.rotate(thetaRad);
+          ctx.beginPath();
+          ctx.rect(d1, -R, Math.max(0.1, d2 - d1), R * 2);
+          ctx.clip();
+          ctx.rotate(-thetaRad);
+          ctx.translate(-cx, -cy);
+
+          ctx.fillStyle = getLayerColor(idx, layers.length, layer.sectionIdx, state.sectionCount);
+          ctx.fillRect(solidLeft, solidTop, solidW, solidH);
+
+          const midD = (d1 + d2) / 2;
+          const labelX = cx + midD * Math.cos(thetaRad);
+          const labelY = cy + midD * Math.sin(thetaRad);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.font = `${Math.max(9, 12 * scaleF * 3)}px Inter, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`C${layer.index}`, labelX, labelY);
+        } else {
+          // Axis-aligned slice: clipped to its exact [wipeXStart, wipeXEnd] x [wipeYStart, wipeYEnd] bounding box
+          const clipX1 = solidLeft + (layer.wipeXStart !== undefined ? layer.wipeXStart : 0) * solidW;
+          const clipX2 = solidLeft + (layer.wipeXEnd !== undefined ? layer.wipeXEnd : 1) * solidW;
+          const clipY1 = solidTop + (layer.wipeYStart !== undefined ? layer.wipeYStart : 0) * solidH;
+          const clipY2 = solidTop + (layer.wipeYEnd !== undefined ? layer.wipeYEnd : 1) * solidH;
+          const clipW = Math.max(0.1, clipX2 - clipX1);
+          const clipH = Math.max(0.1, clipY2 - clipY1);
+
+          ctx.beginPath();
+          ctx.rect(clipX1, clipY1, clipW, clipH);
+          ctx.clip();
+
+          ctx.fillStyle = getLayerColor(idx, layers.length, layer.sectionIdx, state.sectionCount);
+          ctx.fillRect(solidLeft, solidTop, solidW, solidH);
+
+          const labelX = (clipX1 + clipX2) / 2;
+          const labelY = (clipY1 + clipY2) / 2;
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+          ctx.font = `${Math.max(9, 12 * scaleF * 3)}px Inter, sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`C${layer.index}`, labelX, labelY);
+        }
 
         ctx.restore();
 
@@ -1129,30 +1191,36 @@
       // Stroke outer boundary of solid
       ctx.strokeRect(solidLeft, solidTop, solidW, solidH);
 
-      // Stroke cut lines between slices
-      const angle = layers[0] && layers[0].wipeAngle !== undefined ? layers[0].wipeAngle : (state.splitDirection === 'horizontal' ? 90 : 0);
-      const thetaRad = (angle * Math.PI) / 180;
-      const cosA = Math.abs(Math.cos(thetaRad));
-      const sinA = Math.abs(Math.sin(thetaRad));
-      const projD = solidW * cosA + solidH * sinA || 1;
-      const R = Math.hypot(solidW, solidH);
-
       ctx.save();
       ctx.beginPath();
       ctx.rect(solidLeft, solidTop, solidW, solidH);
       ctx.clip();
 
       layers.forEach((lyr) => {
-        const d = (lyr.wipeStart - 0.5) * projD;
-        const px = cx + d * Math.cos(thetaRad);
-        const py = cy + d * Math.sin(thetaRad);
-        const dx = -R * Math.sin(thetaRad);
-        const dy = R * Math.cos(thetaRad);
+        if (lyr.isDiagonal) {
+          const thetaRad = ((lyr.wipeAngle !== undefined ? lyr.wipeAngle : 45) * Math.PI) / 180;
+          const cosA = Math.abs(Math.cos(thetaRad));
+          const sinA = Math.abs(Math.sin(thetaRad));
+          const projD = solidW * cosA + solidH * sinA || 1;
+          const R = Math.hypot(solidW, solidH);
 
-        ctx.beginPath();
-        ctx.moveTo(px - dx, py - dy);
-        ctx.lineTo(px + dx, py + dy);
-        ctx.stroke();
+          const d = (lyr.wipeStart - 0.5) * projD;
+          const px = cx + d * Math.cos(thetaRad);
+          const py = cy + d * Math.sin(thetaRad);
+          const dx = -R * Math.sin(thetaRad);
+          const dy = R * Math.cos(thetaRad);
+
+          ctx.beginPath();
+          ctx.moveTo(px - dx, py - dy);
+          ctx.lineTo(px + dx, py + dy);
+          ctx.stroke();
+        } else {
+          const lyrX = solidLeft + (lyr.wipeXStart !== undefined ? lyr.wipeXStart : 0) * solidW;
+          const lyrY = solidTop + (lyr.wipeYStart !== undefined ? lyr.wipeYStart : 0) * solidH;
+          const lyrW = ((lyr.wipeXEnd !== undefined ? lyr.wipeXEnd : 1) - (lyr.wipeXStart !== undefined ? lyr.wipeXStart : 0)) * solidW;
+          const lyrH = ((lyr.wipeYEnd !== undefined ? lyr.wipeYEnd : 1) - (lyr.wipeYStart !== undefined ? lyr.wipeYStart : 0)) * solidH;
+          ctx.strokeRect(lyrX, lyrY, lyrW, lyrH);
+        }
       });
       ctx.restore();
     } else {
@@ -2144,9 +2212,13 @@
         const pEndPx = (lyr.wipeEnd * projSpanD).toFixed(1);
         const pivotStr = `pivot: [${lyr.pivotX.toFixed(2)}, ${lyr.pivotY.toFixed(2)}]`;
         const offsetStr = `centroid Δ: [${(lyr.sliceCenterOffsetX !== undefined ? lyr.sliceCenterOffsetX : 0).toFixed(1)}, ${(lyr.sliceCenterOffsetY !== undefined ? lyr.sliceCenterOffsetY : 0).toFixed(1)}] px`;
+        const isDual = (!lyr.isDiagonal && (lyr.wipeXStart > 0.0001 || lyr.wipeXEnd < 0.9999) && (lyr.wipeYStart > 0.0001 || lyr.wipeYEnd < 0.9999));
+        const rangeDetail = isDual
+          ? `wipe2[X: ${(lyr.wipeXStart * 100).toFixed(0)}%–${(lyr.wipeXEnd * 100).toFixed(0)}%, Y: ${(lyr.wipeYStart * 100).toFixed(0)}%–${(lyr.wipeYEnd * 100).toFixed(0)}%]`
+          : `wipe2[${sPct}% → ${ePct}%]`;
         html += `<div class="formula-line">
           <span class="formula-label" style="color:var(--cyan); font-weight:700;">Sec ${lyr.sectionIdx + 1} · Cut ${lyr.index}</span>
-          <span class="formula-expr">wipe2[${sPct}% → ${ePct}%] · span [${pStartPx} → ${pEndPx} px] · ${pivotStr} · ${offsetStr}</span>
+          <span class="formula-expr">${rangeDetail} · span [${pStartPx} → ${pEndPx} px] · ${pivotStr} · ${offsetStr}</span>
         </div>`;
       });
     }
@@ -2171,12 +2243,28 @@
 
     layers.forEach((layer) => {
       const col4Val = `${layer.width.toFixed(0)}×${layer.height.toFixed(0)}`;
-      const col5Val = isMask
-        ? (layer.width / 200).toFixed(4)
-        : `${(layer.wipeAngle !== undefined ? layer.wipeAngle : (state.splitDirection === 'horizontal' ? 90 : 0)).toFixed(0)}°`;
-      const col6Val = isMask
-        ? (layer.height / 200).toFixed(4)
-        : `${((layer.wipeStart !== undefined ? layer.wipeStart : 0) * 100).toFixed(1)}% – ${((layer.wipeEnd !== undefined ? layer.wipeEnd : 1) * 100).toFixed(1)}%`;
+      let col5Val;
+      let col6Val;
+      if (isMask) {
+        col5Val = (layer.width / 200).toFixed(4);
+        col6Val = (layer.height / 200).toFixed(4);
+      } else if (layer.isDiagonal) {
+        col5Val = `${(layer.wipeAngle !== undefined ? layer.wipeAngle : 45).toFixed(0)}°`;
+        col6Val = `${((layer.wipeStart !== undefined ? layer.wipeStart : 0) * 100).toFixed(1)}% – ${((layer.wipeEnd !== undefined ? layer.wipeEnd : 1) * 100).toFixed(1)}%`;
+      } else {
+        const hasX = (layer.wipeXStart > 0.0001 || layer.wipeXEnd < 0.9999);
+        const hasY = (layer.wipeYStart > 0.0001 || layer.wipeYEnd < 0.9999);
+        if (hasX && hasY) {
+          col5Val = `0° & 90°`;
+          col6Val = `X:${(layer.wipeXStart * 100).toFixed(0)}–${(layer.wipeXEnd * 100).toFixed(0)}% Y:${(layer.wipeYStart * 100).toFixed(0)}–${(layer.wipeYEnd * 100).toFixed(0)}%`;
+        } else if (hasX) {
+          col5Val = `0° (Vert)`;
+          col6Val = `${(layer.wipeXStart * 100).toFixed(1)}% – ${(layer.wipeXEnd * 100).toFixed(1)}%`;
+        } else {
+          col5Val = `90° (Horiz)`;
+          col6Val = `${(layer.wipeYStart * 100).toFixed(1)}% – ${(layer.wipeYEnd * 100).toFixed(1)}%`;
+        }
+      }
 
       html += `<tr>
         <td class="layer-index">${layer.index}</td>
@@ -2527,39 +2615,65 @@
         xml += `${t}${t}</transform>\n`;
 
         if (!useVideo) xml += `${t}${t}<fillColor value="${amColor}"/>\n`;
-
         const isDiag = layer.isDiagonal || (layer.wipeAngle !== undefined && layer.wipeAngle % 90 !== 0);
-        const wipeAngleVal = layer.wipeAngle !== undefined ? layer.wipeAngle : (state.splitDirection === 'horizontal' ? 90 : 0);
-        const wipeStartVal = layer.wipeStart !== undefined ? layer.wipeStart : (wipeAngleVal === 90 ? layer.wipeYStart : layer.wipeXStart);
-        const wipeEndVal = layer.wipeEnd !== undefined ? layer.wipeEnd : (wipeAngleVal === 90 ? layer.wipeYEnd : layer.wipeXEnd);
 
-        if (isDiag || layer.wipeAngle !== undefined) {
-          if (wipeStartVal > 0.0 || wipeEndVal < 1.0 || isDiag) {
+        if (isDiag) {
+          const wipeAngleVal = layer.wipeAngle !== undefined ? layer.wipeAngle : 45;
+          const wipeStartVal = layer.wipeStart !== undefined ? layer.wipeStart : 0;
+          const wipeEndVal = layer.wipeEnd !== undefined ? layer.wipeEnd : 1;
+
+          if (wipeStartVal > 0.0001 || wipeEndVal < 0.9999 || isDiag) {
             xml += `${t}${t}<effect id="com.alightcreative.effects.wipe2" locallyApplied="true">\n`;
-            if (wipeEndVal < 1.0) xml += `${t}${t}${t}<property name="end" type="float" value="${wipeEndVal.toFixed(6)}"/>\n`;
-            if (wipeStartVal > 0.0) xml += `${t}${t}${t}<property name="start" type="float" value="${wipeStartVal.toFixed(6)}"/>\n`;
             xml += `${t}${t}${t}<property name="angle" type="float" value="${wipeAngleVal.toFixed(6)}"/>\n`;
+            if (wipeEndVal < 0.9999) xml += `${t}${t}${t}<property name="end" type="float" value="${wipeEndVal.toFixed(6)}"/>\n`;
+            if (wipeStartVal > 0.0001) xml += `${t}${t}${t}<property name="start" type="float" value="${wipeStartVal.toFixed(6)}"/>\n`;
+            if (state.wipeSoftness > 0) {
+              xml += `${t}${t}${t}<property name="feather" type="float" value="${(state.wipeSoftness / 100).toFixed(6)}"/>\n`;
+            }
+            xml += `${t}${t}</effect>\n`;
+          }
+
+          if (layer.wipeYStart > 0.0001 || layer.wipeYEnd < 0.9999) {
+            xml += `${t}${t}<effect id="com.alightcreative.effects.wipe2" locallyApplied="true">\n`;
+            xml += `${t}${t}${t}<property name="angle" type="float" value="90.000000"/>\n`;
+            if (layer.wipeYEnd < 0.9999) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeYEnd.toFixed(6)}"/>\n`;
+            if (layer.wipeYStart > 0.0001) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeYStart.toFixed(6)}"/>\n`;
+            if (state.wipeSoftness > 0) {
+              xml += `${t}${t}${t}<property name="feather" type="float" value="${(state.wipeSoftness / 100).toFixed(6)}"/>\n`;
+            }
+            xml += `${t}${t}</effect>\n`;
+          }
+          if (layer.wipeXStart > 0.0001 || layer.wipeXEnd < 0.9999) {
+            xml += `${t}${t}<effect id="com.alightcreative.effects.wipe2" locallyApplied="true">\n`;
+            xml += `${t}${t}${t}<property name="angle" type="float" value="0.000000"/>\n`;
+            if (layer.wipeXEnd < 0.9999) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeXEnd.toFixed(6)}"/>\n`;
+            if (layer.wipeXStart > 0.0001) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeXStart.toFixed(6)}"/>\n`;
             if (state.wipeSoftness > 0) {
               xml += `${t}${t}${t}<property name="feather" type="float" value="${(state.wipeSoftness / 100).toFixed(6)}"/>\n`;
             }
             xml += `${t}${t}</effect>\n`;
           }
         } else {
-          if (layer.wipeYStart > 0.0 || layer.wipeYEnd < 1.0) {
+          // Axis-aligned slice: emit X wipe if X is constrained, and Y wipe if Y is constrained
+          const hasXWipe = (layer.wipeXStart > 0.0001 || layer.wipeXEnd < 0.9999);
+          const hasYWipe = (layer.wipeYStart > 0.0001 || layer.wipeYEnd < 0.9999);
+
+          if (hasXWipe) {
             xml += `${t}${t}<effect id="com.alightcreative.effects.wipe2" locallyApplied="true">\n`;
-            if (layer.wipeYEnd < 1.0) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeYEnd.toFixed(6)}"/>\n`;
-            if (layer.wipeYStart > 0.0) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeYStart.toFixed(6)}"/>\n`;
-            xml += `${t}${t}${t}<property name="angle" type="float" value="90.000000"/>\n`;
+            xml += `${t}${t}${t}<property name="angle" type="float" value="0.000000"/>\n`;
+            if (layer.wipeXEnd < 0.9999) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeXEnd.toFixed(6)}"/>\n`;
+            if (layer.wipeXStart > 0.0001) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeXStart.toFixed(6)}"/>\n`;
             if (state.wipeSoftness > 0) {
               xml += `${t}${t}${t}<property name="feather" type="float" value="${(state.wipeSoftness / 100).toFixed(6)}"/>\n`;
             }
             xml += `${t}${t}</effect>\n`;
           }
-          if (layer.wipeXStart > 0.0 || layer.wipeXEnd < 1.0) {
+
+          if (hasYWipe) {
             xml += `${t}${t}<effect id="com.alightcreative.effects.wipe2" locallyApplied="true">\n`;
-            if (layer.wipeXEnd < 1.0) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeXEnd.toFixed(6)}"/>\n`;
-            if (layer.wipeXStart > 0.0) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeXStart.toFixed(6)}"/>\n`;
-            xml += `${t}${t}${t}<property name="angle" type="float" value="0.000000"/>\n`;
+            xml += `${t}${t}${t}<property name="angle" type="float" value="90.000000"/>\n`;
+            if (layer.wipeYEnd < 0.9999) xml += `${t}${t}${t}<property name="end" type="float" value="${layer.wipeYEnd.toFixed(6)}"/>\n`;
+            if (layer.wipeYStart > 0.0001) xml += `${t}${t}${t}<property name="start" type="float" value="${layer.wipeYStart.toFixed(6)}"/>\n`;
             if (state.wipeSoftness > 0) {
               xml += `${t}${t}${t}<property name="feather" type="float" value="${(state.wipeSoftness / 100).toFixed(6)}"/>\n`;
             }
